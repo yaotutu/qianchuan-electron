@@ -61,6 +61,8 @@ export const WorkspaceLayout = ({ authorization, onReauthorize }: WorkspaceLayou
     toggleAdvertiser,
     setAccountSearch,
     runningPlanCount,
+    accountSelectionInitialized,
+    setAccountSelectionInitialized,
   } = useWorkspaceStore()
   const accounts = authorization.token?.advertiserAccounts || []
   const advertiserIds = authorization.token?.advertiserIds || accounts.map((account) => account.advertiserId)
@@ -70,14 +72,30 @@ export const WorkspaceLayout = ({ authorization, onReauthorize }: WorkspaceLayou
   }, [accounts, advertiserIds])
 
   // 首次进入工作台时默认选中全部授权账号，并把第一家店铺作为当前查询账号。
+  // 后续授权账号列表变化时，只清理失效 ID，不覆盖用户主动取消全选的空状态。
   useEffect(() => {
     const allIds = normalizedAccounts.map((account) => String(account.advertiserId))
-    if (!selectedAdvertiserIds.length && allIds.length) setSelectedAdvertiserIds(allIds)
-    if (!currentAdvertiserId && allIds[0]) setCurrentAdvertiserId(allIds[0])
+    const validSelectedIds = selectedAdvertiserIds.filter((id) => allIds.includes(id))
+
+    if (!accountSelectionInitialized && allIds.length) {
+      setSelectedAdvertiserIds(allIds)
+      setAccountSelectionInitialized(true)
+    } else if (validSelectedIds.length !== selectedAdvertiserIds.length) {
+      // 重新授权后如果原选择全部失效，则默认选中新账号，避免界面停留在“已选 0 个”。
+      setSelectedAdvertiserIds(
+        selectedAdvertiserIds.length > 0 && validSelectedIds.length === 0 ? allIds : validSelectedIds,
+      )
+    }
+
+    if (allIds.length && (!currentAdvertiserId || !allIds.includes(currentAdvertiserId))) {
+      setCurrentAdvertiserId(allIds[0])
+    }
   }, [
+    accountSelectionInitialized,
     currentAdvertiserId,
     normalizedAccounts,
-    selectedAdvertiserIds.length,
+    selectedAdvertiserIds,
+    setAccountSelectionInitialized,
     setCurrentAdvertiserId,
     setSelectedAdvertiserIds,
   ])
@@ -88,6 +106,14 @@ export const WorkspaceLayout = ({ authorization, onReauthorize }: WorkspaceLayou
   const selectAccount = (advertiserId: string) => {
     setCurrentAdvertiserId(advertiserId)
     if (!selectedAdvertiserIds.includes(advertiserId)) toggleAdvertiser(advertiserId)
+
+    // 在推广监控页切换左侧账号时同步更新 URL，保证刷新后仍查询同一家店铺。
+    if (currentView === 'promotion-monitor') {
+      const params = new URLSearchParams(location.search)
+      params.set('account', advertiserId)
+      params.delete('page')
+      navigate({ pathname: location.pathname, search: params.toString() }, { replace: true })
+    }
   }
   const toggleAll = () => {
     const allIds = normalizedAccounts.map((account) => String(account.advertiserId))

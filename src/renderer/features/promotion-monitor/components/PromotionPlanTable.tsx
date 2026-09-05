@@ -13,9 +13,11 @@ type PromotionPlanTableProps = {
   selectedPlanIds: string[]
   total: number
   page: number
-  fetching: boolean
+  loading: boolean
+  refreshing: boolean
   queryStartDate?: string
   queryEndDate?: string
+  lastUpdatedAt?: string
   onTogglePlan: (planId: string) => void
   onTogglePage: (checked: boolean) => void
   onPageChange: (page: number) => void
@@ -31,9 +33,11 @@ export const PromotionPlanTable = ({
   selectedPlanIds,
   total,
   page,
-  fetching,
+  loading,
+  refreshing,
   queryStartDate,
   queryEndDate,
+  lastUpdatedAt,
   onTogglePlan,
   onTogglePage,
   onPageChange,
@@ -139,7 +143,7 @@ export const PromotionPlanTable = ({
         data={plans}
         pagination={false}
         scroll={{ x: 1_250 }}
-        loading={{ loading: fetching, tip: '正在同步…' }}
+        loading={{ loading, tip: '正在同步…' }}
         noDataElement={<Empty description="暂时没有推广监控计划" />}
       />
       {plans.length > 0 && (
@@ -149,7 +153,7 @@ export const PromotionPlanTable = ({
               本页 {plans.length} 条，共 {total} 条
             </span>
             <span className="sync-state">
-              {fetching ? '正在同步…' : `更新于 ${formatDateTime(new Date().toISOString())}`}
+              {refreshing ? '正在同步…' : lastUpdatedAt ? `更新于 ${formatDateTime(lastUpdatedAt)}` : '尚未同步'}
             </span>
             <span className="query-range">{formatDateRange(queryStartDate, queryEndDate)}</span>
           </div>

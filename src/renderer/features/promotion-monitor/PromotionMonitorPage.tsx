@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { Alert, Card } from '@arco-design/web-react'
+import { useEffect, useState } from 'react'
+import { Alert, Button, Card } from '@arco-design/web-react'
 import { useWorkspaceStore } from '../../app/store'
 import { showReadOnlyActionFeedback } from '../../shared/ui/feedback'
 import type { PromotionMonitorPageProps, PromotionMonitorTab } from './model'
@@ -18,8 +18,6 @@ import { usePromotionPlans } from './hooks/usePromotionPlans'
  * 后续新增创建流程或计划写操作不会继续扩大这个文件。
  */
 export const PromotionMonitorPage = ({ currentAccountId, accounts }: PromotionMonitorPageProps) => {
-  const [tab, setTab] = useState<PromotionMonitorTab>('manage')
-  const [monitorInterval, setMonitorInterval] = useState('1')
   const [detailPlan, setDetailPlan] = useState<PromotionPlan | null>(null)
   const {
     selectedPlanIds,
@@ -29,21 +27,36 @@ export const PromotionMonitorPage = ({ currentAccountId, accounts }: PromotionMo
     togglePlan,
     toggleFiltersCollapsed,
     toggleAutoCleanup,
+    monitorInterval,
+    setMonitorInterval,
   } = useWorkspaceStore()
-  const plansState = usePromotionPlans({ currentAccountId })
+  const plansState = usePromotionPlans({
+    currentAccountId,
+    availableAccountIds: accounts.map((account) => String(account.advertiserId)),
+  })
   const plans = plansState.query.data?.plans || []
+
+  // 账号切换后清理上一家店铺的计划勾选，避免批量操作误作用于另一家店铺。
+  useEffect(() => {
+    setSelectedPlanIds([])
+  }, [plansState.filters, setSelectedPlanIds])
 
   // 当前阶段明确禁止在客户端直接执行真实投放写操作，避免误启停或误删除计划。
   const showWriteMessage = showReadOnlyActionFeedback
   const changeTab = (nextTab: PromotionMonitorTab) => {
     setSelectedPlanIds([])
-    setTab(nextTab)
+    plansState.setTab(nextTab)
   }
 
   return (
     <div className="monitoring-view">
-      <MonitorHeader tab={tab} total={plansState.total} accountCount={accounts.length} onTabChange={changeTab} />
-      {tab === 'create' ? (
+      <MonitorHeader
+        tab={plansState.tab}
+        total={plansState.total}
+        accountCount={accounts.length}
+        onTabChange={changeTab}
+      />
+      {plansState.tab === 'create' ? (
         <MonitorCreatePlaceholder onBack={() => changeTab('manage')} />
       ) : (
         <Card className="monitor-panel" bordered={false}>
@@ -74,7 +87,17 @@ export const PromotionMonitorPage = ({ currentAccountId, accounts }: PromotionMo
             onRefresh={() => void plansState.query.refetch()}
             onWriteAction={showWriteMessage}
           />
-          {plansState.query.isError && <Alert type="error" content="获取投放计划失败，请稍后重试。" />}
+          {plansState.query.isError && (
+            <Alert
+              type="error"
+              content="获取投放计划失败，请稍后重试。"
+              action={
+                <Button type="text" size="small" onClick={() => void plansState.query.refetch()}>
+                  重试
+                </Button>
+              }
+            />
+          )}
           {plansState.query.data?.ok === false && (
             <Alert type="error" content={plansState.query.data.message || '获取投放计划失败。'} />
           )}
@@ -85,9 +108,11 @@ export const PromotionMonitorPage = ({ currentAccountId, accounts }: PromotionMo
             selectedPlanIds={selectedPlanIds}
             total={plansState.total}
             page={plansState.page}
-            fetching={plansState.query.isPending || plansState.query.isFetching}
+            loading={plansState.query.isPending && plansState.query.fetchStatus !== 'idle'}
+            refreshing={plansState.query.isFetching}
             queryStartDate={plansState.query.data?.query?.startDate || plansState.query.data?.query?.start_date}
             queryEndDate={plansState.query.data?.query?.endDate || plansState.query.data?.query?.end_date}
+            lastUpdatedAt={plansState.lastUpdatedAt}
             onTogglePlan={togglePlan}
             onTogglePage={(checked) => setSelectedPlanIds(checked ? plans.map((plan) => plan.id) : [])}
             onPageChange={(page) => {
