@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data:"
+    />
+    <title>电小奇 · 千川工作台</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div class="brand">
+          <span class="brand-mark">奇</span>
+          <div>
+            <strong>电小奇</strong>
+            <small>千川工作台</small>
+          </div>
+        </div>
+        <div id="serviceStatus" class="service-status" data-state="checking">
+          <span class="status-dot"></span>
+          <span id="serviceStatusText">正在检测登录服务</span>
+        </div>
+      </header>
+
+      <main class="login-card">
+        <section class="intro-panel">
+          <span class="product-tag">OCEAN ENGINE</span>
+          <h1>连接你的<br />巨量千川账户</h1>
+          <p>完成一次官方授权，即可开始读取账户数据并使用电小奇工具。</p>
+          <ul class="feature-list">
+            <li><span>✓</span> 在巨量官方页面完成授权</li>
+            <li><span>✓</span> 密钥和 Token 仅由服务端保管</li>
+            <li><span>✓</span> 客户端只接收当前用户的数据</li>
+          </ul>
+        </section>
+
+        <section class="action-panel" aria-labelledby="loginTitle">
+          <div class="panel-heading">
+            <div>
+              <h2 id="loginTitle">登录千川</h2>
+              <p>使用开放平台授权连接</p>
+            </div>
+            <span id="authBadge" class="auth-badge" data-state="idle">未登录</span>
+          </div>
+
+          <div id="stateView" class="state-view">
+            <div id="stateIcon" class="state-icon">↗</div>
+            <h3 id="stateTitle">准备开始</h3>
+            <p id="stateMessage">点击登录后，将在系统浏览器中打开巨量官方授权页面。</p>
+            <p id="errorCode" class="error-code"></p>
+          </div>
+
+          <div id="userCard" class="user-card" data-visible="false">
+            <div class="user-main">
+              <div id="avatar" class="avatar">千</div>
+              <div class="user-copy">
+                <h3 id="userName">—</h3>
+                <p id="userId">用户 ID：—</p>
+              </div>
+            </div>
+            <dl class="user-details">
+              <div><dt>邮箱</dt><dd id="userEmail">—</dd></div>
+              <div><dt>应用 ID</dt><dd id="userAppId">—</dd></div>
+              <div><dt>授权范围</dt><dd id="scopeCount">0 项</dd></div>
+              <div><dt>Token 到期</dt><dd id="tokenExpiresAt">—</dd></div>
+            </dl>
+          </div>
+
+          <button id="loginButton" class="primary-button" type="button" disabled>
+            使用巨量千川登录
+          </button>
+          <p class="privacy-note">授权完成后，应用会自动更新登录状态。</p>
+        </section>
+      </main>
+
+      <footer>电小奇 · 让千川投放管理更简单</footer>
+    </div>
+
+    <script src="./renderer.js"></script>
+  </body>
+</html>

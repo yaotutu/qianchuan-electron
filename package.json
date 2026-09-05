@@ -1,0 +1,18 @@
+{
+  "name": "qianchuan-electron",
+  "version": "1.0.0",
+  "description": "千川 Electron 桌面应用",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "version": "electron --version"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "electron": "^44.2.0"
+  },
+  "private": true
+}
