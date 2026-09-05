@@ -69,6 +69,7 @@ Electron Renderer 不接触 App Secret、Access Token、Refresh Token、`auth_co
 - 关键词、投放状态、计划类型和创建时间筛选；
 - 推广监控管理和推广监控创建页面占位；
 - 计划分页、刷新、全选和状态展示；
+- 计划只读详情抽屉，集中查看计划、商品、账号和指标信息；
 - 消耗、支付 ROI、创建时间等读取字段展示；
 - 计划启停、编辑、复制、删除等写操作暂时只保留界面入口并提示未接入，避免误操作真实投放计划。
 
@@ -84,14 +85,16 @@ src/
 └── renderer/                       # React Renderer 新入口
     ├── main.tsx                    # React 根节点
     ├── App.tsx                     # 主题和认证边界
-    ├── app/                        # Provider、QueryClient、Zustand Store
+    ├── app/                        # Provider、QueryClient、Zustand Store、错误边界和路由
     ├── layouts/WorkspaceLayout/    # 顶栏、产品导航、账号栏和内容容器
+    │   └── components/             # 账号选择器等布局级组件
     ├── features/auth/              # OAuth 状态恢复、登录轮询和登录页
     ├── features/promotion-monitor/ # 推广监控列表、筛选、分页和数据 Hook
-    │   ├── components/             # 头部、筛选、工具栏、表格和创建占位
+    │   ├── components/             # 头部、筛选、工具栏、表格、详情抽屉和创建占位
     │   └── hooks/                  # 推广计划查询与分页状态
     ├── shared/api/                 # preload API 适配和 Zod 校验
     ├── shared/model/               # 业务类型、数据 Schema
     ├── shared/utils/               # 金额、日期和指标格式化
+    ├── shared/ui/                  # 统一提示反馈封装
     └── styles/                     # 设计 Token 和全局布局样式
 ```

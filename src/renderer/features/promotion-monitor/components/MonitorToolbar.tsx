@@ -1,4 +1,5 @@
-import { Button, Message, Select, Space, Switch, Typography } from '@arco-design/web-react'
+import { Button, Select, Space, Switch, Typography } from '@arco-design/web-react'
+import { showInfoFeedback } from '../../../shared/ui/feedback'
 import { IconRefresh } from '@arco-design/web-react/icon'
 
 const { Text } = Typography
@@ -58,7 +59,7 @@ export const MonitorToolbar = ({
         checked={autoCleanupEnabled}
         onChange={() => {
           onToggleAutoCleanup()
-          Message.info('自动清理开关已保存为界面配置，自动化执行将在后续版本接入。')
+          showInfoFeedback('自动清理开关已保存为界面配置，自动化执行将在后续版本接入。')
         }}
       />
       <Button type="outline" icon={<IconRefresh />} loading={refreshing} onClick={onRefresh}>

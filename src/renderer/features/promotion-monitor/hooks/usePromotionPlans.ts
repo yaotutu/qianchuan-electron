@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Message } from '@arco-design/web-react'
+import { showErrorFeedback } from '../../../shared/ui/feedback'
 import { useQuery } from '@tanstack/react-query'
 import { useWorkspaceStore } from '../../../app/store'
 import { qianchuanApi } from '../../../shared/api/qianchuan-api'
@@ -47,7 +47,7 @@ export const usePromotionPlans = ({ currentAccountId }: { currentAccountId: stri
 
   useEffect(() => {
     if (query.data?.status === 'reauthorization_required') {
-      Message.error('授权已失效，请重新登录后再查看计划。')
+      showErrorFeedback('授权已失效，请重新登录后再查看计划。')
     }
   }, [query.data?.status])
 

@@ -20,6 +20,7 @@ type PromotionPlanTableProps = {
   onTogglePage: (checked: boolean) => void
   onPageChange: (page: number) => void
   onWriteAction: () => void
+  onOpenDetail: (plan: PromotionPlan) => void
 }
 
 /** 计划表格只负责渲染服务端结果，避免把数据转换和筛选逻辑堆在页面组件中。 */
@@ -37,6 +38,7 @@ export const PromotionPlanTable = ({
   onTogglePage,
   onPageChange,
   onWriteAction,
+  onOpenDetail,
 }: PromotionPlanTableProps) => {
   const selectedVisible = plans.filter((plan) => selectedPlanIds.includes(plan.id)).length
   const columns: ColumnProps<PromotionPlan>[] = [
@@ -107,9 +109,9 @@ export const PromotionPlanTable = ({
     {
       title: '操作',
       width: 220,
-      render: () => (
+      render: (_, plan) => (
         <Space size="mini">
-          <Button type="text" size="mini" onClick={onWriteAction}>
+          <Button type="text" size="mini" onClick={() => onOpenDetail(plan)}>
             详情
           </Button>
           <Button type="text" size="mini" onClick={onWriteAction}>

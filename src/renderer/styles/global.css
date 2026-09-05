@@ -131,3 +131,14 @@ button { cursor: pointer; }
   .monitor-toolbar { align-items: flex-start; flex-direction: column; padding: 10px 0; }
 }
 .menu-item-content { display: inline-flex; align-items: center; gap: 9px; }
+
+/* 全局错误兜底和投放计划详情 */
+.app-error-boundary { display: grid; min-height: 100vh; place-items: center; padding: 32px; background: var(--color-page); }
+.app-error-card { display: grid; width: min(460px, 100%); justify-items: center; gap: 14px; padding: 32px; border: 1px solid var(--color-border); border-radius: 14px; background: var(--color-surface); box-shadow: var(--shadow-panel); text-align: center; }
+.app-error-card .arco-alert { width: 100%; text-align: left; }
+.plan-detail-heading { display: flex; align-items: center; gap: 14px; }
+.plan-detail-heading .arco-typography-title { margin: 0 0 4px; }
+.plan-detail-image { width: 56px; height: 56px; border-radius: 10px; }
+.plan-detail-status { margin-top: 16px; }
+.plan-detail-note { display: flex; align-items: flex-start; gap: 10px; padding: 12px; border-radius: 8px; background: #f7f8fb; }
+.plan-detail-note .arco-typography { line-height: 1.6; }

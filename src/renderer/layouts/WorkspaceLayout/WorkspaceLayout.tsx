@@ -1,12 +1,11 @@
 import { useEffect, useMemo } from 'react'
-import { Avatar, Badge, Button, Card, Input, Layout, Menu, Tag, Typography } from '@arco-design/web-react'
+import { Avatar, Badge, Button, Card, Layout, Menu, Tag, Typography } from '@arco-design/web-react'
 import {
   IconApps,
   IconCaretDown,
   IconDashboard,
   IconExperiment,
   IconRefresh,
-  IconSearch,
   IconSettings,
   IconUser,
 } from '@arco-design/web-react/icon'
@@ -14,6 +13,8 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import type { AuthorizationResult, AdvertiserAccount } from '../../shared/model/qianchuan'
 import { useWorkspaceStore } from '../../app/store'
 import { WorkspaceRoutes } from '../../app/router'
+import { showInfoFeedback } from '../../shared/ui/feedback'
+import { AccountSelector } from './components/AccountSelector'
 
 const { Sider, Content } = Layout
 const { Text } = Typography
@@ -41,9 +42,6 @@ const multiplierNav = [
   { key: 'multiplier-data', label: '乘方数据', icon: <IconExperiment /> },
 ]
 
-const getAccountName = (account?: AdvertiserAccount) =>
-  account?.advertiserName || account?.shopName || `广告主 ${account?.advertiserId || '—'}`
-
 type WorkspaceLayoutProps = {
   authorization: AuthorizationResult
   onReauthorize: () => void
@@ -70,16 +68,6 @@ export const WorkspaceLayout = ({ authorization, onReauthorize }: WorkspaceLayou
     const accountMap = new Map(accounts.map((account) => [String(account.advertiserId), account]))
     return advertiserIds.map((id) => accountMap.get(String(id)) || { advertiserId: String(id) })
   }, [accounts, advertiserIds])
-  const filteredAccounts = normalizedAccounts.filter((account) => {
-    const keyword = accountSearch.trim().toLowerCase()
-    if (!keyword) return true
-    return [account.advertiserName, account.shopName, account.advertiserId]
-      .filter(Boolean)
-      .join(' ')
-      .toLowerCase()
-      .includes(keyword)
-  })
-  const selectedCount = selectedAdvertiserIds.length
 
   // 首次进入工作台时默认选中全部授权账号，并把第一家店铺作为当前查询账号。
   useEffect(() => {
@@ -103,7 +91,7 @@ export const WorkspaceLayout = ({ authorization, onReauthorize }: WorkspaceLayou
   }
   const toggleAll = () => {
     const allIds = normalizedAccounts.map((account) => String(account.advertiserId))
-    setSelectedAdvertiserIds(selectedCount === allIds.length ? [] : allIds)
+    setSelectedAdvertiserIds(selectedAdvertiserIds.length === allIds.length ? [] : allIds)
   }
 
   return (
@@ -179,66 +167,18 @@ export const WorkspaceLayout = ({ authorization, onReauthorize }: WorkspaceLayou
         </Sider>
 
         <Sider className="account-panel" width={246} collapsedWidth={246}>
-          <div className="account-panel-header">
-            <Typography.Title heading={5}>账号选择</Typography.Title>
-            <Button type="text" size="small" onClick={onReauthorize}>
-              新账号登录
-            </Button>
-          </div>
-          <Input.Search
-            allowClear
-            value={accountSearch}
-            onChange={setAccountSearch}
-            placeholder="请输入千川/店铺名"
-            prefix={<IconSearch />}
+          <AccountSelector
+            accounts={normalizedAccounts}
+            currentAccountId={currentAccountId}
+            selectedAdvertiserIds={selectedAdvertiserIds}
+            searchKeyword={accountSearch}
+            onSearchKeywordChange={setAccountSearch}
+            onSelectAccount={selectAccount}
+            onToggleAdvertiser={toggleAdvertiser}
+            onToggleAll={toggleAll}
+            onReauthorize={onReauthorize}
+            onSubscription={() => showInfoFeedback('订购和套餐管理将在商业化模块接入后开放。')}
           />
-          <div className="account-selection-bar">
-            <Button type="text" size="small" onClick={toggleAll}>
-              {selectedCount === normalizedAccounts.length ? '取消全选' : '选择全部'}
-            </Button>
-            <Text type="secondary">
-              已选：<b>{selectedCount}</b>
-            </Text>
-          </div>
-          <div className="account-list">
-            {filteredAccounts.length ? (
-              filteredAccounts.map((account) => {
-                const id = String(account.advertiserId)
-                return (
-                  <button
-                    type="button"
-                    className={`account-row ${id === currentAccountId ? 'is-current' : ''}`}
-                    key={id}
-                    onClick={() => selectAccount(id)}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={selectedAdvertiserIds.includes(id)}
-                      onChange={() => toggleAdvertiser(id)}
-                      onClick={(event) => event.stopPropagation()}
-                      aria-label={`选择 ${getAccountName(account)}`}
-                    />
-                    <span className="account-copy">
-                      <strong>{getAccountName(account)}</strong>
-                      <small>🔗 已授权 · {id}</small>
-                    </span>
-                    <span className="account-state">
-                      <b>生效</b>
-                      <small>去后台</small>
-                    </span>
-                  </button>
-                )
-              })
-            ) : (
-              <div className="account-list-empty">没有匹配的千川账号</div>
-            )}
-          </div>
-          <div className="account-panel-footer">
-            <Text type="secondary">千川超级商品卡</Text>
-            <Button type="text" size="small" onClick={() => window.alert('订购和套餐管理将在商业化模块接入后开放。')}>
-              订购
-            </Button>
-          </div>
         </Sider>
 
         <Content className="workspace-content">

@@ -1,11 +1,14 @@
 import { useState } from 'react'
-import { Alert, Card, Message } from '@arco-design/web-react'
+import { Alert, Card } from '@arco-design/web-react'
 import { useWorkspaceStore } from '../../app/store'
+import { showReadOnlyActionFeedback } from '../../shared/ui/feedback'
 import type { PromotionMonitorPageProps, PromotionMonitorTab } from './model'
+import type { PromotionPlan } from '../../shared/model/qianchuan'
 import { MonitorCreatePlaceholder } from './components/MonitorCreatePlaceholder'
 import { MonitorFilters } from './components/MonitorFilters'
 import { MonitorHeader } from './components/MonitorHeader'
 import { MonitorToolbar } from './components/MonitorToolbar'
+import { PromotionPlanDetailDrawer } from './components/PromotionPlanDetailDrawer'
 import { PromotionPlanTable } from './components/PromotionPlanTable'
 import { usePromotionPlans } from './hooks/usePromotionPlans'
 
@@ -17,6 +20,7 @@ import { usePromotionPlans } from './hooks/usePromotionPlans'
 export const PromotionMonitorPage = ({ currentAccountId, accounts }: PromotionMonitorPageProps) => {
   const [tab, setTab] = useState<PromotionMonitorTab>('manage')
   const [monitorInterval, setMonitorInterval] = useState('1')
+  const [detailPlan, setDetailPlan] = useState<PromotionPlan | null>(null)
   const {
     selectedPlanIds,
     filtersCollapsed,
@@ -30,7 +34,7 @@ export const PromotionMonitorPage = ({ currentAccountId, accounts }: PromotionMo
   const plans = plansState.query.data?.plans || []
 
   // 当前阶段明确禁止在客户端直接执行真实投放写操作，避免误启停或误删除计划。
-  const showWriteMessage = () => Message.info('当前仅接入推广监控读取，写操作将在对应平台接口接入后开放。')
+  const showWriteMessage = showReadOnlyActionFeedback
   const changeTab = (nextTab: PromotionMonitorTab) => {
     setSelectedPlanIds([])
     setTab(nextTab)
@@ -91,9 +95,16 @@ export const PromotionMonitorPage = ({ currentAccountId, accounts }: PromotionMo
               plansState.setPage(page)
             }}
             onWriteAction={showWriteMessage}
+            onOpenDetail={setDetailPlan}
           />
         </Card>
       )}
+      <PromotionPlanDetailDrawer
+        plan={detailPlan}
+        accounts={accounts}
+        visible={Boolean(detailPlan)}
+        onClose={() => setDetailPlan(null)}
+      />
     </div>
   )
 }

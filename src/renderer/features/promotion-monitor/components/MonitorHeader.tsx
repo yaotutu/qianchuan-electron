@@ -1,4 +1,5 @@
-import { Button, Message, Typography } from '@arco-design/web-react'
+import { Button, Typography } from '@arco-design/web-react'
+import { showInfoFeedback } from '../../../shared/ui/feedback'
 import type { PromotionMonitorTab } from '../model'
 
 const { Text } = Typography
@@ -25,10 +26,10 @@ export const MonitorHeader = ({ tab, total, accountCount, onTabChange }: Monitor
       ⌁ <b>{total.toLocaleString('zh-CN')}</b> 项计划监控中，已为 <b>{accountCount}</b> 个账号提供监控保障
     </Text>
     <div className="page-header-links">
-      <Button type="text" onClick={() => Message.info('升级计划将在套餐系统接入后开放。')}>
+      <Button type="text" onClick={() => showInfoFeedback('升级计划将在套餐系统接入后开放。')}>
         体验升级计划
       </Button>
-      <Button type="text" onClick={() => Message.info('使用教程正在整理中。')}>
+      <Button type="text" onClick={() => showInfoFeedback('使用教程正在整理中。')}>
         使用教程
       </Button>
     </div>
