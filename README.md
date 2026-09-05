@@ -41,10 +41,14 @@ QIANCHUAN_OAUTH_SERVER_URL=https://你的服务端域名 npm start
 常用开发命令：
 
 ```bash
+npm run dev             # Vite 热更新 + Electron 开发窗口
 npm run typecheck       # TypeScript 类型检查
 npm run build:renderer  # 构建 React Renderer
+npm run build:electron  # 构建 Electron 主进程和 preload
 npm test                # 运行单元测试
 ```
+
+开发模式下 Renderer 通过 Vite Dev Server 加载；生产模式仍使用 `dist/index.html`，因此两种模式的 OAuth 和 IPC 协议保持一致。
 
 ## 登录流程
 
@@ -72,8 +76,8 @@ Electron Renderer 不接触 App Secret、Access Token、Refresh Token、`auth_co
 
 ```text
 src/
-├── main.js                         # Electron 主进程、OAuth 请求和 IPC
-├── preload.js                      # 安全桥，按 auth / promotionMonitor 分组暴露能力
+├── main.ts                         # Electron 主进程、OAuth 请求和 IPC
+├── preload.ts                      # 安全桥，按 auth / promotionMonitor 分组暴露能力
 ├── index.html                      # 旧版页面入口，暂作回退参考
 ├── renderer.js                     # 旧版 Renderer，暂作回退参考
 ├── styles.css                      # 旧版样式，暂作回退参考
@@ -83,7 +87,9 @@ src/
     ├── app/                        # Provider、QueryClient、Zustand Store
     ├── layouts/WorkspaceLayout/    # 顶栏、产品导航、账号栏和内容容器
     ├── features/auth/              # OAuth 状态恢复、登录轮询和登录页
-    ├── features/promotion-monitor/ # 推广监控列表、筛选和分页
+    ├── features/promotion-monitor/ # 推广监控列表、筛选、分页和数据 Hook
+    │   ├── components/             # 头部、筛选、工具栏、表格和创建占位
+    │   └── hooks/                  # 推广计划查询与分页状态
     ├── shared/api/                 # preload API 适配和 Zod 校验
     ├── shared/model/               # 业务类型、数据 Schema
     ├── shared/utils/               # 金额、日期和指标格式化
