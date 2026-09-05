@@ -65,6 +65,20 @@ export const PromotionMonitorPage = ({ currentAccountId, accounts }: PromotionMo
     mutationFn: (taskIds: string[]) => qianchuanApi.batchDeleteMonitorTasks(taskIds),
     onError: (error) => showErrorFeedback(error instanceof Error ? error.message : '批量删除失败。'),
   })
+  const runNowMutation = useMutation({
+    mutationFn: () => qianchuanApi.runMonitorTasksNow(tasksState.advertiserId),
+    onSuccess: async (result) => {
+      await refreshTasks()
+      if (result.ok !== true) {
+        showErrorFeedback(result.message || '立即检查失败，请稍后重试。')
+        return
+      }
+      showSuccessFeedback(
+        result.skipped ? '已有检查正在执行，请稍后查看结果。' : `本次已检查 ${result.checkedCount} 条运行中任务。`,
+      )
+    },
+    onError: (error) => showErrorFeedback(error instanceof Error ? error.message : '立即检查失败。'),
+  })
   const copyMutation = useMutation({
     mutationFn: (task: MonitorTask) =>
       qianchuanApi.createMonitorTasks({
@@ -167,7 +181,9 @@ export const PromotionMonitorPage = ({ currentAccountId, accounts }: PromotionMo
           <MonitorToolbar
             selectedCount={selectedTaskIds.length}
             refreshing={tasksState.query.isFetching}
+            checking={runNowMutation.isPending}
             onRefresh={() => void tasksState.query.refetch()}
+            onRunNow={() => runNowMutation.mutate()}
             onBatchStatus={batchStatus}
             onBatchDelete={batchDelete}
           />

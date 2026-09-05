@@ -156,6 +156,16 @@ export const monitorTaskListResultSchema = z
   })
   .passthrough()
 
+export const monitorTaskRunResultSchema = z
+  .object({
+    ok: z.boolean().optional().default(false),
+    status: z.string().optional(),
+    message: z.string().optional(),
+    checkedCount: z.number().optional().default(0),
+    skipped: z.boolean().optional().default(false),
+  })
+  .passthrough()
+
 export const monitorTaskMutationResultSchema = z
   .object({
     ok: z.boolean().optional().default(false),
@@ -236,6 +246,8 @@ export type QianchuanBridge = {
     deleteTask: (taskId: string) => Promise<unknown>
     batchUpdateStatus: (taskIds: string[], status: 'RUNNING' | 'PAUSED') => Promise<unknown>
     batchDelete: (taskIds: string[]) => Promise<unknown>
+    runNow: (advertiserId: string) => Promise<unknown>
+    onChanged: (listener: () => void) => () => void
   }
 }
 

@@ -1,12 +1,14 @@
 import { Button, Space, Typography } from '@arco-design/web-react'
-import { IconDelete, IconPause, IconPlayArrow, IconRefresh } from '@arco-design/web-react/icon'
+import { IconDelete, IconPause, IconPlayArrow, IconRefresh, IconThunderbolt } from '@arco-design/web-react/icon'
 
 const { Text } = Typography
 
 type MonitorToolbarProps = {
   selectedCount: number
   refreshing: boolean
+  checking: boolean
   onRefresh: () => void
+  onRunNow: () => void
   onBatchStatus: (status: 'RUNNING' | 'PAUSED') => void
   onBatchDelete: () => void
 }
@@ -15,7 +17,9 @@ type MonitorToolbarProps = {
 export const MonitorToolbar = ({
   selectedCount,
   refreshing,
+  checking,
   onRefresh,
+  onRunNow,
   onBatchStatus,
   onBatchDelete,
 }: MonitorToolbarProps) => (
@@ -43,8 +47,11 @@ export const MonitorToolbar = ({
     </div>
     <Space>
       <Text type="secondary">任务数据保存在本机</Text>
+      <Button type="primary" icon={<IconThunderbolt />} loading={checking} onClick={onRunNow}>
+        立即检查
+      </Button>
       <Button type="outline" icon={<IconRefresh />} loading={refreshing} onClick={onRefresh}>
-        刷新
+        刷新列表
       </Button>
     </Space>
   </div>

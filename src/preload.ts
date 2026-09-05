@@ -26,6 +26,12 @@ const promotionMonitorBridge = {
   batchUpdateStatus: (taskIds: string[], status: 'RUNNING' | 'PAUSED') =>
     ipcRenderer.invoke('monitor-tasks:batch-status', taskIds, status),
   batchDelete: (taskIds: string[]) => ipcRenderer.invoke('monitor-tasks:batch-delete', taskIds),
+  runNow: (advertiserId: string) => ipcRenderer.invoke('monitor-tasks:run-now', advertiserId),
+  onChanged: (listener: () => void) => {
+    const handler = () => listener()
+    ipcRenderer.on('monitor-tasks:changed', handler)
+    return () => ipcRenderer.removeListener('monitor-tasks:changed', handler)
+  },
 }
 
 contextBridge.exposeInMainWorld('qianchuan', {

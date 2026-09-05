@@ -51,6 +51,11 @@ export type MonitorTaskCreateInput = {
   intervalMinutes?: number
 }
 
+export type MonitorTaskCheckResult = {
+  status: 'TRIGGERED' | 'NORMAL' | 'DATA_MISSING' | 'ERROR'
+  message: string
+}
+
 export type MonitorTaskUpdateInput = {
   groupName?: string
   status?: MonitorTaskStatus
@@ -312,6 +317,22 @@ export const createMonitorTaskStore = (filePath: string, dependencies: StoreDepe
         const deletedIds = tasks.filter((task) => idSet.has(task.id)).map((task) => task.id)
         return { tasks: tasks.filter((task) => !idSet.has(task.id)), result: deletedIds }
       }),
+    recordCheck: (taskId: string, checkedAt: Date, result: MonitorTaskCheckResult) =>
+      mutate(async (tasks) => {
+        const current = tasks.find((task) => task.id === taskId)
+        if (!current) throw new MonitorTaskValidationError('监控任务不存在或已经删除。')
+        const checkedAtIso = checkedAt.toISOString()
+        const updated = {
+          ...current,
+          lastCheckedAt: checkedAtIso,
+          lastResult: result,
+        }
+        return {
+          tasks: tasks.map((task) => (task.id === taskId ? updated : task)),
+          result: updated,
+        }
+      }),
+    listAll: async () => readAll(),
     setManyStatus: (taskIds: string[], status: MonitorTaskStatus) =>
       mutate(async (tasks) => {
         const nextStatus = assertStatus(status, 'PAUSED')

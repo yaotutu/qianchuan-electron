@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, shell } from 'electron'
+import { app, BrowserWindow, ipcMain, Notification, shell } from 'electron'
 import path from 'node:path'
 import {
   createMonitorTaskStore,
@@ -7,6 +7,7 @@ import {
   type MonitorTaskStatus,
   type MonitorTaskUpdateInput,
 } from './main/monitor-task-store'
+import { createMonitorScheduler, type MonitorPlanSnapshot } from './main/monitor-scheduler'
 
 type JsonRecord = Record<string, unknown>
 type RequestError = Error & { status?: number; payload?: JsonRecord }
@@ -20,6 +21,7 @@ const oauthServerUrl = (process.env.QIANCHUAN_OAUTH_SERVER_URL || 'http://127.0.
 const requestTimeoutMs = 20_000
 const rendererUrl = process.env.QIANCHUAN_RENDERER_URL
 let monitorTaskStore: ReturnType<typeof createMonitorTaskStore> | null = null
+let monitorScheduler: ReturnType<typeof createMonitorScheduler> | null = null
 
 /** 本地任务仓库只在 Electron ready 后按需初始化，文件位于当前用户的 userData 目录。 */
 const getMonitorTaskStore = () => {
@@ -165,6 +167,73 @@ const createProductPlanSearch = (filters: PlanFilters = {}) => {
 const getProductPlans = async (filters: PlanFilters) =>
   requestOAuthServer(`/api/qianchuan/product-plans?${createProductPlanSearch(filters).toString()}`)
 
+const asJsonRecord = (value: unknown): JsonRecord =>
+  value && typeof value === 'object' && !Array.isArray(value) ? (value as JsonRecord) : {}
+
+const toFiniteNumber = (value: unknown) => {
+  const number = Number(value)
+  return Number.isFinite(number) ? number : undefined
+}
+
+const normalizeMonitorPlan = (value: unknown): MonitorPlanSnapshot | null => {
+  const plan = asJsonRecord(value)
+  const id = String(plan.id ?? '').trim()
+  if (!id) return null
+  const metrics = asJsonRecord(plan.metrics)
+  return {
+    id,
+    name: typeof plan.name === 'string' ? plan.name : undefined,
+    budgetYuan: toFiniteNumber(plan.budgetYuan),
+    metrics: {
+      costYuan: toFiniteNumber(metrics.costYuan),
+      payRoi: toFiniteNumber(metrics.payRoi),
+    },
+  }
+}
+
+/** 使用北京时间当天作为指标口径，与千川后台推广监控默认的“今日数据”保持一致。 */
+const getChinaDate = (date = new Date()) =>
+  new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(date)
+
+/** 调度器按广告主批量读取计划，并在找到所有目标计划后提前停止翻页。 */
+const getAllProductPlansForMonitor = async (
+  advertiserId: string,
+  promotionPlanIds: string[],
+): Promise<MonitorPlanSnapshot[]> => {
+  const targetIds = new Set(promotionPlanIds)
+  const foundPlans = new Map<string, MonitorPlanSnapshot>()
+  const today = getChinaDate()
+  let page = 1
+  let totalPages = 1
+
+  do {
+    const result = await getProductPlans({
+      advertiser_id: advertiserId,
+      status: 'ALL',
+      scene: 'UNI_PROJECT',
+      start_date: today,
+      end_date: today,
+      page,
+      page_size: 100,
+    })
+    const pagePlans = Array.isArray(result.plans) ? result.plans : []
+    pagePlans.forEach((value) => {
+      const plan = normalizeMonitorPlan(value)
+      if (plan && targetIds.has(plan.id)) foundPlans.set(plan.id, plan)
+    })
+    const pageInfo = asJsonRecord(result.page)
+    totalPages = Math.min(1_000, Math.max(1, Number(pageInfo.totalPages) || 1))
+    page += 1
+  } while (page <= totalPages && foundPlans.size < targetIds.size)
+
+  return [...foundPlans.values()]
+}
+
 /** 监控任务全部保存在 Electron 本地，服务端只负责 OAuth 和千川只读计划代理。 */
 const getMonitorTasks = async (filters: MonitorTaskFilters) => {
   const result = await getMonitorTaskStore().list(filters)
@@ -194,6 +263,20 @@ const batchUpdateMonitorTaskStatus = async (taskIds: string[], status: string) =
 const batchDeleteMonitorTasks = async (taskIds: string[]) => {
   const deletedIds = await getMonitorTaskStore().removeMany(taskIds)
   return { ok: true, status: 'deleted', deletedIds }
+}
+
+/** 将主进程任务变化通知给 Renderer，让任务列表无需手动刷新即可显示检查结果。 */
+const broadcastMonitorTasksChanged = () => {
+  BrowserWindow.getAllWindows().forEach((window) => window.webContents.send('monitor-tasks:changed'))
+}
+
+/** 通知动作只在状态从正常变为触发时弹出，避免每分钟重复打扰用户。 */
+const notifyMonitorTask = (task: { promotionPlanName: string }, result: { message: string }) => {
+  if (!Notification.isSupported()) return
+  new Notification({
+    title: `推广监控触发：${task.promotionPlanName}`,
+    body: result.message,
+  }).show()
 }
 
 /** 将异常转换成不包含 Token、Secret、Cookie 和本地路径的 IPC 响应。 */
@@ -298,6 +381,15 @@ const registerIpcHandlers = () => {
       return toSafeError(error)
     }
   })
+  ipcMain.handle('monitor-tasks:run-now', async (_event, advertiserId: string) => {
+    try {
+      if (!monitorScheduler) throw new Error('本地监控调度器尚未启动。')
+      const result = await monitorScheduler.runOnce({ force: true, advertiserId: String(advertiserId || '').trim() })
+      return { ok: true, status: result.skipped ? 'busy' : 'checked', ...result }
+    } catch (error) {
+      return toSafeError(error)
+    }
+  })
 }
 
 /** 创建应用主窗口，生产环境加载 Vite 产物，主进程本身不加载远程页面。 */
@@ -327,10 +419,21 @@ const createWindow = async () => {
 
 app.whenReady().then(() => {
   registerIpcHandlers()
+  monitorScheduler = createMonitorScheduler({
+    store: getMonitorTaskStore(),
+    fetchPlans: getAllProductPlansForMonitor,
+    notify: notifyMonitorTask,
+    onTaskChanged: broadcastMonitorTasksChanged,
+  })
+  monitorScheduler.start()
   void createWindow()
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) void createWindow()
   })
+})
+
+app.on('before-quit', () => {
+  monitorScheduler?.stop()
 })
 
 app.on('window-all-closed', () => {

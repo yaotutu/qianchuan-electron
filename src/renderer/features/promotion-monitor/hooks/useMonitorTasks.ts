@@ -1,4 +1,4 @@
-import { keepPreviousData, useQuery } from '@tanstack/react-query'
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useWorkspaceStore } from '../../../app/store'
@@ -30,6 +30,7 @@ const readPage = (value: string | null) => {
  */
 export const useMonitorTasks = ({ currentAccountId, availableAccountIds, enabled }: UseMonitorTasksOptions) => {
   const [searchParams, setSearchParams] = useSearchParams()
+  const queryClient = useQueryClient()
   const { currentAdvertiserId, setCurrentAdvertiserId, setRunningMonitorCount } = useWorkspaceStore()
   const requestedAccountId = searchParams.get('account')?.trim() || ''
   const advertiserId =
@@ -105,6 +106,13 @@ export const useMonitorTasks = ({ currentAccountId, availableAccountIds, enabled
     enabled: Boolean(advertiserId),
   })
   const runningCount = Number(runningCountQuery.data?.page?.total || 0)
+
+  useEffect(() => {
+    const unsubscribe = qianchuanApi.onMonitorTasksChanged(() => {
+      void queryClient.invalidateQueries({ queryKey: ['promotion-monitor', 'tasks'] })
+    })
+    return unsubscribe
+  }, [queryClient])
 
   useEffect(() => setRunningMonitorCount(runningCount), [runningCount, setRunningMonitorCount])
   useEffect(() => {

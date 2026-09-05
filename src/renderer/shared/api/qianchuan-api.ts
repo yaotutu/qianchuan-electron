@@ -4,6 +4,7 @@ import {
   promotionPlanResultSchema,
   monitorTaskListResultSchema,
   monitorTaskMutationResultSchema,
+  monitorTaskRunResultSchema,
   type PromotionPlanFilters,
   type MonitorTaskFilters,
   type MonitorTaskInput,
@@ -37,4 +38,7 @@ export const qianchuanApi = {
     monitorTaskMutationResultSchema.parse(await getBridge().promotionMonitor.batchUpdateStatus(taskIds, status)),
   batchDeleteMonitorTasks: async (taskIds: string[]) =>
     monitorTaskMutationResultSchema.parse(await getBridge().promotionMonitor.batchDelete(taskIds)),
+  runMonitorTasksNow: async (advertiserId: string) =>
+    monitorTaskRunResultSchema.parse(await getBridge().promotionMonitor.runNow(advertiserId)),
+  onMonitorTasksChanged: (listener: () => void) => getBridge().promotionMonitor.onChanged(listener),
 }
