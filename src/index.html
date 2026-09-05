@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data:"
+      content="default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data: https:"
     />
     <title>电小奇 · 千川工作台</title>
     <link rel="stylesheet" href="./styles.css" />
@@ -20,66 +20,170 @@
             <small>千川工作台</small>
           </div>
         </div>
-        <div id="serviceStatus" class="service-status" data-state="checking">
-          <span class="status-dot"></span>
-          <span id="serviceStatusText">正在检测登录服务</span>
+        <div class="topbar-actions">
+          <div id="serviceStatus" class="service-status" data-state="checking">
+            <span class="status-dot"></span>
+            <span id="serviceStatusText">正在检测登录服务</span>
+          </div>
+          <button id="reauthorizeButton" class="ghost-button" type="button" hidden>重新授权</button>
         </div>
       </header>
 
-      <main class="login-card">
-        <section class="intro-panel">
-          <span class="product-tag">OCEAN ENGINE</span>
-          <h1>连接你的<br />巨量千川账户</h1>
-          <p>完成一次官方授权，即可开始读取账户数据并使用电小奇工具。</p>
-          <ul class="feature-list">
-            <li><span>✓</span> 在巨量官方页面完成授权</li>
-            <li><span>✓</span> 密钥和 Token 仅由服务端保管</li>
-            <li><span>✓</span> 客户端只接收当前用户的数据</li>
-          </ul>
+      <main>
+        <section id="loginCard" class="login-card">
+          <section class="intro-panel">
+            <span class="product-tag">OCEAN ENGINE</span>
+            <h1>连接你的<br />巨量千川账户</h1>
+            <p>完成一次官方授权，即可开始读取账户数据并使用电小奇工具。</p>
+            <ul class="feature-list">
+              <li><span>✓</span> 在巨量官方页面完成授权</li>
+              <li><span>✓</span> 密钥和 Token 仅由服务端保管</li>
+              <li><span>✓</span> 登录后查看商品投放计划</li>
+            </ul>
+          </section>
+
+          <section class="action-panel" aria-labelledby="loginTitle">
+            <div class="panel-heading">
+              <div>
+                <h2 id="loginTitle">登录千川</h2>
+                <p>使用开放平台授权连接</p>
+              </div>
+              <span id="authBadge" class="auth-badge" data-state="idle">未登录</span>
+            </div>
+
+            <div id="stateView" class="state-view">
+              <div id="stateIcon" class="state-icon">↗</div>
+              <h3 id="stateTitle">准备开始</h3>
+              <p id="stateMessage">点击登录后，将在系统浏览器中打开巨量官方授权页面。</p>
+              <p id="errorCode" class="error-code"></p>
+            </div>
+
+            <div id="userCard" class="user-card" data-visible="false">
+              <div class="user-main">
+                <div id="avatar" class="avatar">千</div>
+                <div class="user-copy">
+                  <h3 id="userName">—</h3>
+                  <p id="userId">用户 ID：—</p>
+                </div>
+              </div>
+              <dl class="user-details">
+                <div><dt>邮箱</dt><dd id="userEmail">—</dd></div>
+                <div><dt>应用 ID</dt><dd id="userAppId">—</dd></div>
+                <div><dt>授权范围</dt><dd id="scopeCount">0 项</dd></div>
+                <div><dt>Token 到期</dt><dd id="tokenExpiresAt">—</dd></div>
+              </dl>
+            </div>
+
+            <button id="loginButton" class="primary-button" type="button" disabled>
+              使用巨量千川登录
+            </button>
+            <p class="privacy-note">授权完成后，应用会自动更新登录状态。</p>
+          </section>
         </section>
 
-        <section class="action-panel" aria-labelledby="loginTitle">
-          <div class="panel-heading">
-            <div>
-              <h2 id="loginTitle">登录千川</h2>
-              <p>使用开放平台授权连接</p>
+        <section id="workspace" class="workspace" hidden>
+          <aside class="sidebar">
+            <div class="sidebar-section-label">工作台</div>
+            <button class="nav-item is-active" type="button">
+              <span class="nav-icon">▦</span>
+              <span>投放计划</span>
+            </button>
+            <div class="sidebar-bottom">
+              <div class="mini-user"><span id="miniAvatar" class="mini-avatar">千</span><span id="miniUserName">千川用户</span></div>
+              <button id="sidebarReauthorizeButton" class="sidebar-link" type="button">重新授权</button>
             </div>
-            <span id="authBadge" class="auth-badge" data-state="idle">未登录</span>
-          </div>
+          </aside>
 
-          <div id="stateView" class="state-view">
-            <div id="stateIcon" class="state-icon">↗</div>
-            <h3 id="stateTitle">准备开始</h3>
-            <p id="stateMessage">点击登录后，将在系统浏览器中打开巨量官方授权页面。</p>
-            <p id="errorCode" class="error-code"></p>
-          </div>
+          <section class="workspace-content">
+            <div class="workspace-heading">
+              <div>
+                <span class="eyebrow">PRODUCT PROMOTION</span>
+                <h1>商品投放计划</h1>
+                <p>查看店铺商品计划的投放状态与核心经营指标。</p>
+              </div>
+              <button id="refreshPlansButton" class="secondary-button" type="button"><span>↻</span> 刷新数据</button>
+            </div>
 
-          <div id="userCard" class="user-card" data-visible="false">
-            <div class="user-main">
-              <div id="avatar" class="avatar">千</div>
-              <div class="user-copy">
-                <h3 id="userName">—</h3>
-                <p id="userId">用户 ID：—</p>
+            <div class="summary-strip">
+              <div><span>当前店铺</span><strong id="currentAdvertiser">—</strong></div>
+              <div><span>计划总数</span><strong id="planTotal">—</strong></div>
+              <div><span>查询范围</span><strong id="queryRange">近 30 天</strong></div>
+              <div><span>最近同步</span><strong id="lastSyncedAt">—</strong></div>
+            </div>
+
+            <form id="planFilters" class="filter-bar">
+              <label class="filter-field">
+                <span>授权店铺</span>
+                <select id="advertiserSelect" name="advertiser_id" aria-label="选择授权店铺">
+                  <option value="">自动选择</option>
+                </select>
+              </label>
+              <label class="filter-field filter-field-wide">
+                <span>搜索商品或计划</span>
+                <input id="keywordInput" name="keyword" type="search" placeholder="输入商品名称" maxlength="100" />
+              </label>
+              <label class="filter-field">
+                <span>投放状态</span>
+                <select id="statusSelect" name="status">
+                  <option value="ALL">全部状态</option>
+                  <option value="DELIVERY_OK">投放中</option>
+                  <option value="DISABLE">已暂停</option>
+                  <option value="AUDIT">审核中</option>
+                  <option value="TIME_DONE">已完成</option>
+                  <option value="OFFLINE_BUDGET">预算不足</option>
+                  <option value="ALL_INCLUDE_DELETED">包含已删除</option>
+                </select>
+              </label>
+              <label class="filter-field">
+                <span>计划类型</span>
+                <select id="sceneSelect" name="scene">
+                  <option value="UNI_PROJECT">全域计划</option>
+                  <option value="OVERALL_PROJECT">乘方计划</option>
+                </select>
+              </label>
+              <button class="filter-submit" type="submit">查询</button>
+            </form>
+
+            <div id="plansError" class="plans-alert" hidden></div>
+            <div class="table-card">
+              <div class="table-headline"><h2>计划列表</h2><span id="planLoadingText">—</span></div>
+              <div class="table-scroll">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>计划 / 商品</th>
+                      <th>状态</th>
+                      <th>类型</th>
+                      <th>消耗</th>
+                      <th>支付 ROI</th>
+                      <th>成交金额</th>
+                      <th>订单</th>
+                      <th>创建时间</th>
+                    </tr>
+                  </thead>
+                  <tbody id="plansTableBody"></tbody>
+                </table>
+                <div id="plansEmpty" class="plans-empty" hidden>
+                  <div class="empty-icon">⌁</div>
+                  <h3>暂时没有商品投放计划</h3>
+                  <p>可以调整筛选条件，或确认巨量后台已有商品计划。</p>
+                </div>
+              </div>
+              <div class="pagination">
+                <span id="paginationSummary">—</span>
+                <div class="pagination-actions">
+                  <button id="previousPageButton" class="page-button" type="button">上一页</button>
+                  <span id="paginationPage">1 / 1</span>
+                  <button id="nextPageButton" class="page-button" type="button">下一页</button>
+                </div>
               </div>
             </div>
-            <dl class="user-details">
-              <div><dt>邮箱</dt><dd id="userEmail">—</dd></div>
-              <div><dt>应用 ID</dt><dd id="userAppId">—</dd></div>
-              <div><dt>授权范围</dt><dd id="scopeCount">0 项</dd></div>
-              <div><dt>Token 到期</dt><dd id="tokenExpiresAt">—</dd></div>
-            </dl>
-          </div>
-
-          <button id="loginButton" class="primary-button" type="button" disabled>
-            使用巨量千川登录
-          </button>
-          <p class="privacy-note">授权完成后，应用会自动更新登录状态。</p>
+          </section>
         </section>
       </main>
 
       <footer>电小奇 · 让千川投放管理更简单</footer>
     </div>
-
     <script src="./renderer.js"></script>
   </body>
 </html>

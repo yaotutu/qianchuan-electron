@@ -9,7 +9,7 @@ const path = require("node:path");
 const oauthServerUrl = (
   process.env.QIANCHUAN_OAUTH_SERVER_URL || "http://127.0.0.1:3100"
 ).replace(/\/+$/, "");
-const requestTimeoutMs = 10_000;
+const requestTimeoutMs = 20_000;
 let activeAttemptId = null;
 let activeLoginStartedAt = null;
 
@@ -139,7 +139,7 @@ const getCurrentAuthorization = async () => {
 const getOAuthHealth = async () => {
   const health = await requestOAuthServer("/health");
   const capabilities = Array.isArray(health.capabilities) ? health.capabilities : [];
-  const requiredCapabilities = ["oauth-attempt-result", "current-authorization"];
+  const requiredCapabilities = ["oauth-attempt-result", "current-authorization", "product-plan-list"];
 
   // 旧服务不具备持久化恢复能力，必须提示重启，不能继续按新协议调用。
   if (!health.version || requiredCapabilities.some((name) => !capabilities.includes(name))) {
@@ -163,6 +163,39 @@ const getOAuthHealth = async () => {
   return { ok: true, status: "ready", version: health.version };
 };
 
+
+/**
+ * 只把允许的计划筛选项发送给自有服务端。
+ * Renderer 即使传入额外字段，也不会被拼接到 URL 或影响服务端请求。
+ */
+const createProductPlanSearch = (filters = {}) => {
+  const params = new URLSearchParams();
+  const allowedKeys = [
+    "advertiser_id",
+    "keyword",
+    "status",
+    "scene",
+    "start_date",
+    "end_date",
+    "page",
+    "page_size",
+  ];
+
+  allowedKeys.forEach((key) => {
+    const value = filters?.[key];
+    if (["string", "number"].includes(typeof value) && String(value).trim()) {
+      params.set(key, String(value).trim());
+    }
+  });
+  return params;
+};
+
+/** 由主进程代替 Renderer 请求商品投放计划，Token 始终停留在服务端。 */
+const getProductPlans = async (filters) => {
+  const params = createProductPlanSearch(filters);
+  return requestOAuthServer(`/api/qianchuan/product-plans?${params.toString()}`);
+};
+
 /**
  * 将异常转成不包含敏感数据的 IPC 响应。
  * 主进程也不把 error.stack 传给 Renderer，避免暴露本地路径和内部细节。
@@ -178,10 +211,19 @@ const toSafeError = (error) => {
     };
   }
 
+  if (error?.payload && [400, 401, 403, 502].includes(error.status)) {
+    return {
+      ok: false,
+      status: error.payload.status || "error",
+      message: error.payload.message || "服务端请求失败。",
+      platformCode: error.payload.platformCode ?? null,
+    };
+  }
+
   return {
     ok: false,
     status: "error",
-    message: error instanceof Error ? error.message : "请求 OAuth 服务端时发生未知错误。",
+    message: error instanceof Error ? error.message : "请求服务端时发生未知错误。",
   };
 };
 
@@ -217,6 +259,15 @@ const registerIpcHandlers = () => {
       return toSafeError(error);
     }
   });
+
+
+  ipcMain.handle("plans:list", async (_event, filters) => {
+    try {
+      return await getProductPlans(filters);
+    } catch (error) {
+      return toSafeError(error);
+    }
+  });
 };
 
 /**
@@ -225,9 +276,10 @@ const registerIpcHandlers = () => {
  */
 const createWindow = () => {
   const mainWindow = new BrowserWindow({
-    width: 920,
-    height: 640,
-    minWidth: 760,
+    width: 1360,
+    height: 820,
+    minWidth: 1080,
+    minHeight: 680,
     minHeight: 560,
     webPreferences: {
       contextIsolation: true,
