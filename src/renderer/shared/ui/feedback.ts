@@ -7,7 +7,3 @@ import { Message } from '@arco-design/web-react'
 export const showInfoFeedback = (message: string) => Message.info(message)
 export const showSuccessFeedback = (message: string) => Message.success(message)
 export const showErrorFeedback = (message: string) => Message.error(message)
-
-/** 当前阶段所有真实写操作统一使用同一条只读提示，避免不同页面文案不一致。 */
-export const showReadOnlyActionFeedback = () =>
-  showInfoFeedback('当前仅接入推广监控读取，写操作将在对应平台接口接入后开放。')

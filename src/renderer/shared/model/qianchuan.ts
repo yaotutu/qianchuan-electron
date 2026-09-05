@@ -20,9 +20,10 @@ export const authorizationSchema = z
     errorDescription: z.string().optional(),
     user: z
       .object({
-        id: z.union([z.string(), z.number()]).optional().transform((value) =>
-          value === undefined ? undefined : String(value),
-        ),
+        id: z
+          .union([z.string(), z.number()])
+          .optional()
+          .transform((value) => (value === undefined ? undefined : String(value))),
         displayName: z.string().optional(),
         email: z.string().optional(),
         appId: z.union([z.string(), z.number()]).optional(),
@@ -60,9 +61,10 @@ export const productSchema = z
 export const promotionPlanSchema = z
   .object({
     id: z.union([z.string(), z.number()]).transform(String),
-    advertiserId: z.union([z.string(), z.number()]).optional().transform((value) =>
-      value === undefined ? undefined : String(value),
-    ),
+    advertiserId: z
+      .union([z.string(), z.number()])
+      .optional()
+      .transform((value) => (value === undefined ? undefined : String(value))),
     name: z.string().optional(),
     status: z.string().optional(),
     createTime: z.string().optional(),
@@ -83,9 +85,10 @@ export const promotionPlanResultSchema = z
     status: z.string().optional(),
     message: z.string().optional(),
     platformCode: z.union([z.string(), z.number()]).nullable().optional(),
-    advertiserId: z.union([z.string(), z.number()]).optional().transform((value) =>
-      value === undefined ? undefined : String(value),
-    ),
+    advertiserId: z
+      .union([z.string(), z.number()])
+      .optional()
+      .transform((value) => (value === undefined ? undefined : String(value))),
     plans: z.array(promotionPlanSchema).optional().default([]),
     page: z
       .object({
@@ -107,11 +110,71 @@ export const promotionPlanResultSchema = z
   })
   .passthrough()
 
+export const monitorRuleSchema = z.object({
+  metric: z.enum(['ROI', 'COST', 'BUDGET']),
+  operator: z.enum(['GT', 'GTE', 'LT', 'LTE']),
+  threshold: z.number(),
+})
+
+export const monitorTaskSchema = z.object({
+  id: z.string(),
+  advertiserId: z.union([z.string(), z.number()]).transform(String),
+  promotionPlanId: z.union([z.string(), z.number()]).transform(String),
+  promotionPlanName: z.string(),
+  productName: z.string().optional().default(''),
+  productImage: z.string().optional().default(''),
+  platformStatus: z.string().optional().default(''),
+  groupName: z.string().optional().default(''),
+  status: z.enum(['RUNNING', 'PAUSED']),
+  rule: monitorRuleSchema,
+  action: z.enum(['NOTICE']),
+  intervalMinutes: z.number(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  lastCheckedAt: z.string().nullable().optional(),
+  lastResult: z.object({ status: z.string(), message: z.string() }).optional(),
+})
+
+export const monitorTaskListResultSchema = z
+  .object({
+    ok: z.boolean().optional().default(false),
+    status: z.string().optional(),
+    message: z.string().optional(),
+    advertiserId: z
+      .union([z.string(), z.number()])
+      .optional()
+      .transform((value) => (value === undefined ? undefined : String(value))),
+    tasks: z.array(monitorTaskSchema).optional().default([]),
+    page: z
+      .object({
+        current: z.union([z.number(), z.string()]).optional(),
+        pageSize: z.union([z.number(), z.string()]).optional(),
+        total: z.union([z.number(), z.string()]).optional(),
+        totalPages: z.union([z.number(), z.string()]).optional(),
+      })
+      .optional(),
+  })
+  .passthrough()
+
+export const monitorTaskMutationResultSchema = z
+  .object({
+    ok: z.boolean().optional().default(false),
+    status: z.string().optional(),
+    message: z.string().optional(),
+    task: monitorTaskSchema.optional(),
+    tasks: z.array(monitorTaskSchema).optional(),
+    deletedIds: z.array(z.string()).optional(),
+  })
+  .passthrough()
+
 export type AdvertiserAccount = z.infer<typeof advertiserAccountSchema>
 export type AuthorizationResult = z.infer<typeof authorizationSchema>
 export type HealthResult = z.infer<typeof healthSchema>
 export type PromotionPlan = z.infer<typeof promotionPlanSchema>
 export type PromotionPlanResult = z.infer<typeof promotionPlanResultSchema>
+export type MonitorRule = z.infer<typeof monitorRuleSchema>
+export type MonitorTask = z.infer<typeof monitorTaskSchema>
+export type MonitorTaskListResult = z.infer<typeof monitorTaskListResultSchema>
 
 export type PromotionPlanFilters = {
   advertiser_id: string
@@ -124,6 +187,40 @@ export type PromotionPlanFilters = {
   page_size: number
 }
 
+export type MonitorTaskFilters = {
+  advertiser_id: string
+  keyword: string
+  status: 'ALL' | 'RUNNING' | 'PAUSED'
+  metric: 'ALL' | MonitorRule['metric']
+  action: 'ALL' | 'NOTICE'
+  page: number
+  page_size: number
+}
+
+export type MonitorTaskInput = {
+  advertiserId?: string
+  plans?: Array<{
+    id: string
+    name: string
+    productName?: string
+    productImage?: string
+    status?: string
+  }>
+  groupName?: string
+  status?: 'RUNNING' | 'PAUSED'
+  rule?: MonitorRule
+  action?: 'NOTICE'
+  intervalMinutes?: number
+}
+
+export type MonitorTaskUpdateInput = {
+  groupName?: string
+  status?: 'RUNNING' | 'PAUSED'
+  rule?: MonitorRule
+  action?: 'NOTICE'
+  intervalMinutes?: number
+}
+
 export type QianchuanBridge = {
   auth: {
     startLogin: () => Promise<unknown>
@@ -133,6 +230,12 @@ export type QianchuanBridge = {
   }
   promotionMonitor: {
     listPlans: (filters: PromotionPlanFilters) => Promise<unknown>
+    listTasks: (filters: MonitorTaskFilters) => Promise<unknown>
+    createTask: (input: MonitorTaskInput) => Promise<unknown>
+    updateTask: (taskId: string, input: MonitorTaskUpdateInput) => Promise<unknown>
+    deleteTask: (taskId: string) => Promise<unknown>
+    batchUpdateStatus: (taskIds: string[], status: 'RUNNING' | 'PAUSED') => Promise<unknown>
+    batchDelete: (taskIds: string[]) => Promise<unknown>
   }
 }
 

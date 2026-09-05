@@ -1,5 +1,10 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { PromotionPlanFilters } from './renderer/shared/model/qianchuan'
+import type {
+  MonitorTaskFilters,
+  MonitorTaskInput,
+  MonitorTaskUpdateInput,
+  PromotionPlanFilters,
+} from './renderer/shared/model/qianchuan'
 
 /**
  * preload 是渲染进程和主进程之间的安全边界。
@@ -13,6 +18,14 @@ const authBridge = {
 }
 const promotionMonitorBridge = {
   listPlans: (filters: PromotionPlanFilters) => ipcRenderer.invoke('plans:list', filters),
+  listTasks: (filters: MonitorTaskFilters) => ipcRenderer.invoke('monitor-tasks:list', filters),
+  createTask: (input: MonitorTaskInput) => ipcRenderer.invoke('monitor-tasks:create', input),
+  updateTask: (taskId: string, input: MonitorTaskUpdateInput) =>
+    ipcRenderer.invoke('monitor-tasks:update', taskId, input),
+  deleteTask: (taskId: string) => ipcRenderer.invoke('monitor-tasks:delete', taskId),
+  batchUpdateStatus: (taskIds: string[], status: 'RUNNING' | 'PAUSED') =>
+    ipcRenderer.invoke('monitor-tasks:batch-status', taskIds, status),
+  batchDelete: (taskIds: string[]) => ipcRenderer.invoke('monitor-tasks:batch-delete', taskIds),
 }
 
 contextBridge.exposeInMainWorld('qianchuan', {

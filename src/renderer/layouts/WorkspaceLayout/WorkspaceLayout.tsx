@@ -60,7 +60,7 @@ export const WorkspaceLayout = ({ authorization, onReauthorize }: WorkspaceLayou
     setSelectedAdvertiserIds,
     toggleAdvertiser,
     setAccountSearch,
-    runningPlanCount,
+    runningMonitorCount,
     accountSelectionInitialized,
     setAccountSelectionInitialized,
   } = useWorkspaceStore()
@@ -135,7 +135,7 @@ export const WorkspaceLayout = ({ authorization, onReauthorize }: WorkspaceLayou
         <div className="topbar-center">
           <Badge count={0} dot>
             <span className="running-status">
-              <IconDashboard /> {runningPlanCount.toLocaleString('zh-CN')} 项推广计划监控中 <IconCaretDown />
+              <IconDashboard /> {runningMonitorCount.toLocaleString('zh-CN')} 项推广计划监控中 <IconCaretDown />
             </span>
           </Badge>
           <span className="automation-status">

@@ -1,5 +1,12 @@
 import { app, BrowserWindow, ipcMain, shell } from 'electron'
 import path from 'node:path'
+import {
+  createMonitorTaskStore,
+  type MonitorTaskCreateInput,
+  type MonitorTaskFilters,
+  type MonitorTaskStatus,
+  type MonitorTaskUpdateInput,
+} from './main/monitor-task-store'
 
 type JsonRecord = Record<string, unknown>
 type RequestError = Error & { status?: number; payload?: JsonRecord }
@@ -12,6 +19,15 @@ type PlanFilters = Record<string, unknown>
 const oauthServerUrl = (process.env.QIANCHUAN_OAUTH_SERVER_URL || 'http://127.0.0.1:3100').replace(/\/+$/, '')
 const requestTimeoutMs = 20_000
 const rendererUrl = process.env.QIANCHUAN_RENDERER_URL
+let monitorTaskStore: ReturnType<typeof createMonitorTaskStore> | null = null
+
+/** 本地任务仓库只在 Electron ready 后按需初始化，文件位于当前用户的 userData 目录。 */
+const getMonitorTaskStore = () => {
+  if (!monitorTaskStore) {
+    monitorTaskStore = createMonitorTaskStore(path.join(app.getPath('userData'), 'monitor-tasks.json'))
+  }
+  return monitorTaskStore
+}
 let activeAttemptId: string | null = null
 let activeLoginStartedAt: string | null = null
 
@@ -149,6 +165,37 @@ const createProductPlanSearch = (filters: PlanFilters = {}) => {
 const getProductPlans = async (filters: PlanFilters) =>
   requestOAuthServer(`/api/qianchuan/product-plans?${createProductPlanSearch(filters).toString()}`)
 
+/** 监控任务全部保存在 Electron 本地，服务端只负责 OAuth 和千川只读计划代理。 */
+const getMonitorTasks = async (filters: MonitorTaskFilters) => {
+  const result = await getMonitorTaskStore().list(filters)
+  return { ok: true, status: 'ready', ...result }
+}
+
+const createMonitorTasks = async (input: MonitorTaskCreateInput) => {
+  const tasks = await getMonitorTaskStore().create(input)
+  return { ok: true, status: 'created', tasks }
+}
+
+const updateMonitorTask = async (taskId: string, input: MonitorTaskUpdateInput) => {
+  const task = await getMonitorTaskStore().update(taskId, input)
+  return { ok: true, status: 'updated', task }
+}
+
+const deleteMonitorTask = async (taskId: string) => {
+  const deletedIds = await getMonitorTaskStore().removeMany([taskId])
+  return { ok: true, status: 'deleted', deletedIds }
+}
+
+const batchUpdateMonitorTaskStatus = async (taskIds: string[], status: string) => {
+  const tasks = await getMonitorTaskStore().setManyStatus(taskIds, status as MonitorTaskStatus)
+  return { ok: true, status: 'updated', tasks }
+}
+
+const batchDeleteMonitorTasks = async (taskIds: string[]) => {
+  const deletedIds = await getMonitorTaskStore().removeMany(taskIds)
+  return { ok: true, status: 'deleted', deletedIds }
+}
+
 /** 将异常转换成不包含 Token、Secret、Cookie 和本地路径的 IPC 响应。 */
 const toSafeError = (error: unknown) => {
   const details = getErrorDetails(error)
@@ -205,6 +252,48 @@ const registerIpcHandlers = () => {
   ipcMain.handle('plans:list', async (_event, filters: PlanFilters) => {
     try {
       return await getProductPlans(filters)
+    } catch (error) {
+      return toSafeError(error)
+    }
+  })
+  ipcMain.handle('monitor-tasks:list', async (_event, filters: MonitorTaskFilters) => {
+    try {
+      return await getMonitorTasks(filters || {})
+    } catch (error) {
+      return toSafeError(error)
+    }
+  })
+  ipcMain.handle('monitor-tasks:create', async (_event, input: MonitorTaskCreateInput) => {
+    try {
+      return await createMonitorTasks(input)
+    } catch (error) {
+      return toSafeError(error)
+    }
+  })
+  ipcMain.handle('monitor-tasks:update', async (_event, taskId: string, input: MonitorTaskUpdateInput) => {
+    try {
+      return await updateMonitorTask(taskId, input)
+    } catch (error) {
+      return toSafeError(error)
+    }
+  })
+  ipcMain.handle('monitor-tasks:delete', async (_event, taskId: string) => {
+    try {
+      return await deleteMonitorTask(taskId)
+    } catch (error) {
+      return toSafeError(error)
+    }
+  })
+  ipcMain.handle('monitor-tasks:batch-status', async (_event, taskIds: string[], status: MonitorTaskStatus) => {
+    try {
+      return await batchUpdateMonitorTaskStatus(taskIds, status)
+    } catch (error) {
+      return toSafeError(error)
+    }
+  })
+  ipcMain.handle('monitor-tasks:batch-delete', async (_event, taskIds: string[]) => {
+    try {
+      return await batchDeleteMonitorTasks(taskIds)
     } catch (error) {
       return toSafeError(error)
     }

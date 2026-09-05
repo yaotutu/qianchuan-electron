@@ -23,7 +23,7 @@ export const MonitorHeader = ({ tab, total, accountCount, onTabChange }: Monitor
       </Button>
     </div>
     <Text className="monitoring-summary">
-      ⌁ <b>{total.toLocaleString('zh-CN')}</b> 项计划监控中，已为 <b>{accountCount}</b> 个账号提供监控保障
+      ⌁ 当前筛选共 <b>{total.toLocaleString('zh-CN')}</b> 项任务，已接入 <b>{accountCount}</b> 个千川账号
     </Text>
     <div className="page-header-links">
       <Button type="text" onClick={() => showInfoFeedback('升级计划将在套餐系统接入后开放。')}>

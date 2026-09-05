@@ -13,42 +13,28 @@ export type WorkspaceView =
 type WorkspaceState = {
   currentAdvertiserId: string
   selectedAdvertiserIds: string[]
-  selectedPlanIds: string[]
+  selectedTaskIds: string[]
   accountSearch: string
-  filtersCollapsed: boolean
-  autoCleanupEnabled: boolean
-  monitorInterval: string
   accountSelectionInitialized: boolean
-  runningPlanCount: number
+  runningMonitorCount: number
   setCurrentAdvertiserId: (advertiserId: string) => void
   setSelectedAdvertiserIds: (advertiserIds: string[]) => void
   toggleAdvertiser: (advertiserId: string) => void
-  setSelectedPlanIds: (planIds: string[]) => void
-  togglePlan: (planId: string) => void
+  setSelectedTaskIds: (taskIds: string[]) => void
+  toggleTask: (taskId: string) => void
   setAccountSearch: (keyword: string) => void
-  toggleFiltersCollapsed: () => void
-  toggleAutoCleanup: () => void
-  setMonitorInterval: (interval: string) => void
   setAccountSelectionInitialized: (initialized: boolean) => void
-  setRunningPlanCount: (count: number) => void
+  setRunningMonitorCount: (count: number) => void
 }
 
 type PersistedWorkspaceState = Pick<
   WorkspaceState,
-  | 'currentAdvertiserId'
-  | 'selectedAdvertiserIds'
-  | 'accountSearch'
-  | 'filtersCollapsed'
-  | 'autoCleanupEnabled'
-  | 'monitorInterval'
-  | 'accountSelectionInitialized'
+  'currentAdvertiserId' | 'selectedAdvertiserIds' | 'accountSearch' | 'accountSelectionInitialized'
 >
-
-const MONITOR_INTERVALS = new Set(['1', '5', '10'])
 
 /**
  * 持久化前做一次轻量清洗，避免旧版本或手工修改 localStorage 破坏工作台状态。
- * 这里明确只允许保存界面偏好，授权凭据永远由服务端管理，不进入 Zustand。
+ * 这里只保存账号选择和界面偏好，授权凭据、任务数据和临时勾选状态都不会进入 Zustand。
  */
 const sanitizePersistedState = (value: unknown): Partial<PersistedWorkspaceState> => {
   if (!value || typeof value !== 'object') return {}
@@ -56,35 +42,25 @@ const sanitizePersistedState = (value: unknown): Partial<PersistedWorkspaceState
   const advertiserIds = Array.isArray(persisted.selectedAdvertiserIds)
     ? persisted.selectedAdvertiserIds.filter((id): id is string => typeof id === 'string' && Boolean(id))
     : []
-  const monitorInterval =
-    typeof persisted.monitorInterval === 'string' && MONITOR_INTERVALS.has(persisted.monitorInterval)
-      ? persisted.monitorInterval
-      : '1'
 
   return {
     currentAdvertiserId: typeof persisted.currentAdvertiserId === 'string' ? persisted.currentAdvertiserId : '',
     selectedAdvertiserIds: [...new Set(advertiserIds)],
     accountSearch: typeof persisted.accountSearch === 'string' ? persisted.accountSearch : '',
-    filtersCollapsed: persisted.filtersCollapsed === true,
-    autoCleanupEnabled: persisted.autoCleanupEnabled === true,
-    monitorInterval,
     accountSelectionInitialized: persisted.accountSelectionInitialized === true,
   }
 }
 
-/** 只把安全的本地界面偏好写入持久化存储，运行时数据和计划勾选状态不持久化。 */
+/** 任务勾选和运行数量属于当前窗口运行态，关闭应用后无需恢复。 */
 export const useWorkspaceStore = create<WorkspaceState>()(
   persist(
     (set) => ({
       currentAdvertiserId: '',
       selectedAdvertiserIds: [],
-      selectedPlanIds: [],
+      selectedTaskIds: [],
       accountSearch: '',
-      filtersCollapsed: false,
-      autoCleanupEnabled: false,
-      monitorInterval: '1',
       accountSelectionInitialized: false,
-      runningPlanCount: 0,
+      runningMonitorCount: 0,
       setCurrentAdvertiserId: (currentAdvertiserId) => set({ currentAdvertiserId }),
       setSelectedAdvertiserIds: (selectedAdvertiserIds) => set({ selectedAdvertiserIds }),
       toggleAdvertiser: (advertiserId) =>
@@ -93,37 +69,27 @@ export const useWorkspaceStore = create<WorkspaceState>()(
             ? state.selectedAdvertiserIds.filter((id) => id !== advertiserId)
             : [...state.selectedAdvertiserIds, advertiserId],
         })),
-      setSelectedPlanIds: (selectedPlanIds) => set({ selectedPlanIds }),
-      togglePlan: (planId) =>
+      setSelectedTaskIds: (selectedTaskIds) => set({ selectedTaskIds }),
+      toggleTask: (taskId) =>
         set((state) => ({
-          selectedPlanIds: state.selectedPlanIds.includes(planId)
-            ? state.selectedPlanIds.filter((id) => id !== planId)
-            : [...state.selectedPlanIds, planId],
+          selectedTaskIds: state.selectedTaskIds.includes(taskId)
+            ? state.selectedTaskIds.filter((id) => id !== taskId)
+            : [...state.selectedTaskIds, taskId],
         })),
       setAccountSearch: (accountSearch) => set({ accountSearch }),
-      toggleFiltersCollapsed: () => set((state) => ({ filtersCollapsed: !state.filtersCollapsed })),
-      toggleAutoCleanup: () => set((state) => ({ autoCleanupEnabled: !state.autoCleanupEnabled })),
-      setMonitorInterval: (monitorInterval) =>
-        set({ monitorInterval: MONITOR_INTERVALS.has(monitorInterval) ? monitorInterval : '1' }),
       setAccountSelectionInitialized: (accountSelectionInitialized) => set({ accountSelectionInitialized }),
-      setRunningPlanCount: (runningPlanCount) => set({ runningPlanCount }),
+      setRunningMonitorCount: (runningMonitorCount) => set({ runningMonitorCount }),
     }),
     {
       name: 'qianchuan-workspace-preferences',
-      version: 1,
+      version: 2,
       partialize: (state) => ({
         currentAdvertiserId: state.currentAdvertiserId,
         selectedAdvertiserIds: state.selectedAdvertiserIds,
         accountSearch: state.accountSearch,
-        filtersCollapsed: state.filtersCollapsed,
-        autoCleanupEnabled: state.autoCleanupEnabled,
-        monitorInterval: state.monitorInterval,
         accountSelectionInitialized: state.accountSelectionInitialized,
       }),
-      merge: (persisted, current) => ({
-        ...current,
-        ...sanitizePersistedState(persisted),
-      }),
+      merge: (persisted, current) => ({ ...current, ...sanitizePersistedState(persisted) }),
     },
   ),
 )

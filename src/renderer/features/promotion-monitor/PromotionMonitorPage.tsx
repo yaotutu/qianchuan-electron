@@ -1,134 +1,242 @@
 import { useEffect, useState } from 'react'
-import { Alert, Button, Card } from '@arco-design/web-react'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { Alert, Button, Card, Modal } from '@arco-design/web-react'
+import { useSearchParams } from 'react-router-dom'
 import { useWorkspaceStore } from '../../app/store'
-import { showReadOnlyActionFeedback } from '../../shared/ui/feedback'
+import { qianchuanApi } from '../../shared/api/qianchuan-api'
+import type { MonitorTask, MonitorTaskUpdateInput } from '../../shared/model/qianchuan'
+import { showErrorFeedback, showSuccessFeedback } from '../../shared/ui/feedback'
 import type { PromotionMonitorPageProps, PromotionMonitorTab } from './model'
-import type { PromotionPlan } from '../../shared/model/qianchuan'
-import { MonitorCreatePlaceholder } from './components/MonitorCreatePlaceholder'
+import { MonitorCreatePage } from './components/MonitorCreatePage'
 import { MonitorFilters } from './components/MonitorFilters'
 import { MonitorHeader } from './components/MonitorHeader'
+import { MonitorTaskEditorModal } from './components/MonitorTaskEditorModal'
+import { MonitorTaskTable } from './components/MonitorTaskTable'
 import { MonitorToolbar } from './components/MonitorToolbar'
-import { PromotionPlanDetailDrawer } from './components/PromotionPlanDetailDrawer'
-import { PromotionPlanTable } from './components/PromotionPlanTable'
-import { usePromotionPlans } from './hooks/usePromotionPlans'
+import { useMonitorTasks } from './hooks/useMonitorTasks'
 
 /**
- * 推广监控功能入口。
- * 页面只编排独立组件；查询、筛选、表格和工具栏均拥有清晰边界，
- * 后续新增创建流程或计划写操作不会继续扩大这个文件。
+ * 推广监控入口已经切换为真实本地任务闭环：创建、筛选、启停、编辑、复制和删除。
+ * 千川计划读取仍走服务端薄代理，任务 CRUD 则全部通过 preload 进入 Electron 主进程。
  */
 export const PromotionMonitorPage = ({ currentAccountId, accounts }: PromotionMonitorPageProps) => {
-  const [detailPlan, setDetailPlan] = useState<PromotionPlan | null>(null)
-  const {
-    selectedPlanIds,
-    filtersCollapsed,
-    autoCleanupEnabled,
-    setSelectedPlanIds,
-    togglePlan,
-    toggleFiltersCollapsed,
-    toggleAutoCleanup,
-    monitorInterval,
-    setMonitorInterval,
-  } = useWorkspaceStore()
-  const plansState = usePromotionPlans({
+  const [searchParams, setSearchParams] = useSearchParams()
+  const tab: PromotionMonitorTab = searchParams.get('tab') === 'create' ? 'create' : 'manage'
+  const [editingTask, setEditingTask] = useState<MonitorTask | null>(null)
+  const queryClient = useQueryClient()
+  const { selectedTaskIds, setSelectedTaskIds, toggleTask } = useWorkspaceStore()
+  const tasksState = useMonitorTasks({
     currentAccountId,
     availableAccountIds: accounts.map((account) => String(account.advertiserId)),
+    enabled: tab === 'manage',
   })
-  const plans = plansState.query.data?.plans || []
+  const tasks = tasksState.query.data?.tasks || []
 
-  // 账号切换后清理上一家店铺的计划勾选，避免批量操作误作用于另一家店铺。
-  useEffect(() => {
-    setSelectedPlanIds([])
-  }, [plansState.filters, setSelectedPlanIds])
+  useEffect(() => setSelectedTaskIds([]), [tasksState.advertiserId, tasksState.page, setSelectedTaskIds])
 
-  // 当前阶段明确禁止在客户端直接执行真实投放写操作，避免误启停或误删除计划。
-  const showWriteMessage = showReadOnlyActionFeedback
+  const refreshTasks = async () => {
+    await queryClient.invalidateQueries({ queryKey: ['promotion-monitor', 'tasks'] })
+  }
+  const handleMutationResult = async (result: { ok?: boolean; message?: string }, successMessage: string) => {
+    if (result.ok !== true) {
+      showErrorFeedback(result.message || '操作失败，请重试。')
+      return false
+    }
+    await refreshTasks()
+    showSuccessFeedback(successMessage)
+    return true
+  }
+
+  const updateMutation = useMutation({
+    mutationFn: ({ taskId, input }: { taskId: string; input: MonitorTaskUpdateInput }) =>
+      qianchuanApi.updateMonitorTask(taskId, input),
+    onError: (error) => showErrorFeedback(error instanceof Error ? error.message : '更新任务失败。'),
+  })
+  const deleteMutation = useMutation({
+    mutationFn: (taskId: string) => qianchuanApi.deleteMonitorTask(taskId),
+    onError: (error) => showErrorFeedback(error instanceof Error ? error.message : '删除任务失败。'),
+  })
+  const batchStatusMutation = useMutation({
+    mutationFn: ({ taskIds, status }: { taskIds: string[]; status: 'RUNNING' | 'PAUSED' }) =>
+      qianchuanApi.batchUpdateMonitorTaskStatus(taskIds, status),
+    onError: (error) => showErrorFeedback(error instanceof Error ? error.message : '批量更新失败。'),
+  })
+  const batchDeleteMutation = useMutation({
+    mutationFn: (taskIds: string[]) => qianchuanApi.batchDeleteMonitorTasks(taskIds),
+    onError: (error) => showErrorFeedback(error instanceof Error ? error.message : '批量删除失败。'),
+  })
+  const copyMutation = useMutation({
+    mutationFn: (task: MonitorTask) =>
+      qianchuanApi.createMonitorTasks({
+        advertiserId: task.advertiserId,
+        plans: [
+          {
+            id: task.promotionPlanId,
+            name: `${task.promotionPlanName}（副本）`,
+            productName: task.productName,
+            productImage: task.productImage,
+            status: task.platformStatus,
+          },
+        ],
+        groupName: task.groupName,
+        status: 'PAUSED',
+        rule: task.rule,
+        action: 'NOTICE',
+        intervalMinutes: task.intervalMinutes,
+      }),
+    onError: (error) => showErrorFeedback(error instanceof Error ? error.message : '复制任务失败。'),
+  })
+
   const changeTab = (nextTab: PromotionMonitorTab) => {
-    setSelectedPlanIds([])
-    plansState.setTab(nextTab)
+    setSelectedTaskIds([])
+    setSearchParams(
+      (current) => {
+        const next = new URLSearchParams(current)
+        if (nextTab === 'manage') next.delete('tab')
+        else next.set('tab', 'create')
+        next.delete('page')
+        return next
+      },
+      { replace: true },
+    )
+  }
+
+  const batchStatus = (status: 'RUNNING' | 'PAUSED') => {
+    if (!selectedTaskIds.length) return
+    batchStatusMutation.mutate(
+      { taskIds: selectedTaskIds, status },
+      {
+        onSuccess: async (result) => {
+          if (
+            await handleMutationResult(result, status === 'RUNNING' ? '已批量启用监控任务。' : '已批量暂停监控任务。')
+          ) {
+            setSelectedTaskIds([])
+          }
+        },
+      },
+    )
+  }
+
+  const batchDelete = () => {
+    if (!selectedTaskIds.length) return
+    Modal.confirm({
+      title: '批量删除监控任务',
+      content: `确定删除选中的 ${selectedTaskIds.length} 条本地监控任务吗？此操作不会删除千川计划。`,
+      okButtonProps: { status: 'danger' },
+      onOk: () =>
+        new Promise<void>((resolve, reject) => {
+          batchDeleteMutation.mutate(selectedTaskIds, {
+            onSuccess: async (result) => {
+              if (await handleMutationResult(result, '已删除选中的监控任务。')) {
+                setSelectedTaskIds([])
+                resolve()
+              } else reject(new Error(result.message || '删除失败'))
+            },
+            onError: reject,
+          })
+        }),
+    })
   }
 
   return (
     <div className="monitoring-view">
-      <MonitorHeader
-        tab={plansState.tab}
-        total={plansState.total}
-        accountCount={accounts.length}
-        onTabChange={changeTab}
-      />
-      {plansState.tab === 'create' ? (
-        <MonitorCreatePlaceholder onBack={() => changeTab('manage')} />
+      <MonitorHeader tab={tab} total={tasksState.total} accountCount={accounts.length} onTabChange={changeTab} />
+      {tab === 'create' ? (
+        <MonitorCreatePage
+          accounts={accounts}
+          advertiserId={tasksState.advertiserId}
+          onAdvertiserChange={tasksState.setAdvertiserId}
+          onBack={() => changeTab('manage')}
+        />
       ) : (
         <Card className="monitor-panel" bordered={false}>
           <MonitorFilters
             accounts={accounts}
-            advertiserId={plansState.advertiserId}
-            keyword={plansState.keyword}
-            status={plansState.status}
-            scene={plansState.scene}
-            dates={plansState.dates}
-            collapsed={filtersCollapsed}
-            onAdvertiserChange={plansState.setAdvertiserId}
-            onKeywordChange={plansState.setKeyword}
-            onStatusChange={plansState.setStatus}
-            onSceneChange={plansState.setScene}
-            onDatesChange={plansState.setDates}
-            onSearch={plansState.runSearch}
-            onReset={plansState.resetFilters}
-            onToggleCollapsed={toggleFiltersCollapsed}
+            advertiserId={tasksState.advertiserId}
+            keyword={tasksState.keyword}
+            status={tasksState.status}
+            metric={tasksState.metric}
+            action={tasksState.action}
+            onAdvertiserChange={tasksState.setAdvertiserId}
+            onKeywordChange={tasksState.setKeyword}
+            onStatusChange={tasksState.setStatus}
+            onMetricChange={tasksState.setMetric}
+            onActionChange={tasksState.setAction}
+            onReset={tasksState.resetFilters}
           />
           <MonitorToolbar
-            selectedCount={selectedPlanIds.length}
-            monitorInterval={monitorInterval}
-            autoCleanupEnabled={autoCleanupEnabled}
-            refreshing={plansState.query.isFetching}
-            onIntervalChange={setMonitorInterval}
-            onToggleAutoCleanup={toggleAutoCleanup}
-            onRefresh={() => void plansState.query.refetch()}
-            onWriteAction={showWriteMessage}
+            selectedCount={selectedTaskIds.length}
+            refreshing={tasksState.query.isFetching}
+            onRefresh={() => void tasksState.query.refetch()}
+            onBatchStatus={batchStatus}
+            onBatchDelete={batchDelete}
           />
-          {plansState.query.isError && (
+          {tasksState.query.isError && (
             <Alert
               type="error"
-              content="获取投放计划失败，请稍后重试。"
+              content="读取本地监控任务失败，请稍后重试。"
               action={
-                <Button type="text" size="small" onClick={() => void plansState.query.refetch()}>
+                <Button type="text" size="small" onClick={() => void tasksState.query.refetch()}>
                   重试
                 </Button>
               }
             />
           )}
-          {plansState.query.data?.ok === false && (
-            <Alert type="error" content={plansState.query.data.message || '获取投放计划失败。'} />
+          {tasksState.query.data?.ok === false && (
+            <Alert type="error" content={tasksState.query.data.message || '读取本地监控任务失败。'} />
           )}
-          <PromotionPlanTable
-            plans={plans}
+          <MonitorTaskTable
+            tasks={tasks}
             accounts={accounts}
-            advertiserId={plansState.advertiserId}
-            selectedPlanIds={selectedPlanIds}
-            total={plansState.total}
-            page={plansState.page}
-            loading={plansState.query.isPending && plansState.query.fetchStatus !== 'idle'}
-            refreshing={plansState.query.isFetching}
-            queryStartDate={plansState.query.data?.query?.startDate || plansState.query.data?.query?.start_date}
-            queryEndDate={plansState.query.data?.query?.endDate || plansState.query.data?.query?.end_date}
-            lastUpdatedAt={plansState.lastUpdatedAt}
-            onTogglePlan={togglePlan}
-            onTogglePage={(checked) => setSelectedPlanIds(checked ? plans.map((plan) => plan.id) : [])}
-            onPageChange={(page) => {
-              setSelectedPlanIds([])
-              plansState.setPage(page)
-            }}
-            onWriteAction={showWriteMessage}
-            onOpenDetail={setDetailPlan}
+            selectedTaskIds={selectedTaskIds}
+            total={tasksState.total}
+            page={tasksState.page}
+            loading={tasksState.query.isPending && tasksState.query.fetchStatus !== 'idle'}
+            onToggleTask={toggleTask}
+            onTogglePage={(checked) => setSelectedTaskIds(checked ? tasks.map((task) => task.id) : [])}
+            onPageChange={tasksState.setPage}
+            onEdit={setEditingTask}
+            onToggleStatus={(task) =>
+              updateMutation.mutate(
+                { taskId: task.id, input: { status: task.status === 'RUNNING' ? 'PAUSED' : 'RUNNING' } },
+                {
+                  onSuccess: (result) =>
+                    void handleMutationResult(
+                      result,
+                      task.status === 'RUNNING' ? '监控任务已暂停。' : '监控任务已启用。',
+                    ),
+                },
+              )
+            }
+            onCopy={(task) =>
+              copyMutation.mutate(task, {
+                onSuccess: (result) => void handleMutationResult(result, '已复制任务，新任务默认为暂停状态。'),
+              })
+            }
+            onDelete={(task) =>
+              deleteMutation.mutate(task.id, {
+                onSuccess: (result) => void handleMutationResult(result, '监控任务已删除。'),
+              })
+            }
           />
         </Card>
       )}
-      <PromotionPlanDetailDrawer
-        plan={detailPlan}
-        accounts={accounts}
-        visible={Boolean(detailPlan)}
-        onClose={() => setDetailPlan(null)}
+      <MonitorTaskEditorModal
+        task={editingTask}
+        visible={Boolean(editingTask)}
+        submitting={updateMutation.isPending}
+        onCancel={() => setEditingTask(null)}
+        onSubmit={(input) => {
+          if (!editingTask) return
+          updateMutation.mutate(
+            { taskId: editingTask.id, input },
+            {
+              onSuccess: async (result) => {
+                if (await handleMutationResult(result, '监控规则已保存。')) setEditingTask(null)
+              },
+            },
+          )
+        }}
       />
     </div>
   )
