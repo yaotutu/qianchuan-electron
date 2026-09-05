@@ -4,15 +4,44 @@
   "description": "千川 Electron 桌面应用",
   "main": "src/main.js",
   "scripts": {
-    "start": "electron .",
-    "version": "electron --version"
+    "start": "npm run build:renderer && electron .",
+    "version": "electron --version",
+    "dev": "npm run build:renderer && electron .",
+    "build:renderer": "vite build --config vite.config.mts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "format:check": "prettier --check \"src/**/*.{js,ts,tsx,css,html}\""
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
   "devDependencies": {
-    "electron": "^44.2.0"
+    "@testing-library/dom": "^10.4.1",
+    "@testing-library/react": "^16.3.3",
+    "@testing-library/user-event": "^14.6.7",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.7",
+    "@vitejs/plugin-react": "^6.1.1",
+    "electron": "^44.2.0",
+    "eslint": "^10.10.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "jsdom": "^30.0.1",
+    "prettier": "^3.9.6",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.69.0",
+    "vite": "^8.2.2",
+    "vitest": "^5.0.0"
   },
-  "private": true
+  "private": true,
+  "dependencies": {
+    "@arco-design/web-react": "^2.66.16",
+    "@tanstack/react-query": "^5.102.8",
+    "dayjs": "^1.11.23",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "react-router-dom": "^7.18.3",
+    "zod": "^4.5.4",
+    "zustand": "^5.0.15"
+  }
 }

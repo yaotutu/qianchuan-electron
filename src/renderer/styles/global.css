@@ -1,0 +1,133 @@
+* { box-sizing: border-box; }
+html, body, #root { width: 100%; min-width: 1120px; height: 100%; margin: 0; overflow: hidden; }
+body { color: var(--color-text); background: var(--color-page); font: 14px/1.5 Inter, "PingFang SC", "Microsoft YaHei", sans-serif; -webkit-font-smoothing: antialiased; }
+button, input, select { font: inherit; }
+button { cursor: pointer; }
+
+.app-loading { display: flex; width: 100%; height: 100%; align-items: center; justify-content: center; gap: 14px; color: var(--color-text-secondary); background: var(--color-page); font-size: 15px; }
+
+/* 登录页 */
+.login-stage { display: grid; min-height: 100%; place-items: center; padding: 48px; background: radial-gradient(circle at 12% 12%, #e9edff 0, transparent 32%), radial-gradient(circle at 92% 82%, #e8f7f3 0, transparent 28%), #f6f7fb; }
+.login-card { width: min(960px, 88vw); overflow: hidden; border: 1px solid rgb(223 229 240 / 85%); border-radius: 18px; box-shadow: 0 24px 60px rgb(39 52 93 / 12%); }
+.login-card > .arco-card-body { display: grid; min-height: 570px; grid-template-columns: 1.05fr .95fr; padding: 0; }
+.intro-panel { padding: 62px 58px; color: #fff; background: linear-gradient(145deg, #3349be 0%, #5269e8 54%, #657cf4 100%); }
+.intro-panel .arco-tag { margin-bottom: 36px; color: #fff; background: rgb(255 255 255 / 13%); }
+.intro-panel .arco-typography { color: inherit; }
+.intro-panel h1 { margin: 0 0 22px; font-size: 42px; line-height: 1.18; letter-spacing: -1.5px; }
+.intro-panel p { max-width: 390px; color: rgb(255 255 255 / 78%); font-size: 15px; line-height: 1.9; }
+.feature-list { display: grid; gap: 18px; margin: 45px 0 0; padding: 0; list-style: none; }
+.feature-list li { display: flex; align-items: flex-start; gap: 12px; color: rgb(255 255 255 / 84%); }
+.feature-list li > svg { margin-top: 4px; }
+.feature-list li span { display: grid; gap: 2px; }
+.feature-list li b { color: #fff; font-size: 15px; }
+.action-panel { display: flex; min-width: 0; flex-direction: column; justify-content: center; padding: 48px 54px; background: #fff; }
+.panel-heading { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 24px; }
+.panel-heading h2 { margin: 5px 0 2px; font-size: 28px; }
+.state-view { display: grid; min-height: 238px; align-content: center; justify-items: center; margin-bottom: 22px; padding: 26px; border: 1px dashed #dbe2ee; border-radius: 14px; background: #fafbfe; text-align: center; }
+.state-view.is-error { border-color: #f0c9c9; background: #fff9f8; }
+.state-view .state-icon { display: grid; width: 58px; height: 58px; margin-bottom: 10px; place-items: center; border-radius: 18px; background: var(--color-primary-soft); color: var(--color-primary); font-size: 27px; }
+.state-view h3 { margin: 8px 0; }
+.state-view p { max-width: 330px; margin: 0; color: var(--color-text-secondary); }
+.user-card { margin-bottom: 24px; border-radius: 14px; background: #f8f9fd; }
+.user-main { display: flex; align-items: center; gap: 14px; margin-bottom: 18px; }
+.user-main .avatar { display: grid; width: 54px; height: 54px; place-items: center; border-radius: 16px; color: #fff; background: linear-gradient(135deg, #5269e8, #7a8df4); font-size: 22px; font-weight: 700; }
+.user-main h4 { margin: 0 0 2px; }
+.user-details .arco-descriptions-item-label { width: 90px; color: var(--color-text-secondary); }
+.privacy-note { display: flex; align-items: center; justify-content: center; gap: 6px; margin-top: 14px; color: #909bad; font-size: 12px; }
+.login-alert { margin-top: 14px; }
+.login-footer { position: fixed; bottom: 22px; }
+
+/* 工作台顶栏 */
+.workspace-shell { width: 100%; height: 100%; background: var(--color-page); }
+.topbar { display: flex; height: var(--topbar-height); flex: 0 0 auto; align-items: center; gap: 14px; padding: 0 18px; border-bottom: 1px solid var(--color-border); background: #fff; box-shadow: 0 2px 8px rgb(37 52 83 / 3%); }
+.topbar-brand { display: flex; align-items: center; gap: 9px; white-space: nowrap; }
+.topbar-brand strong { font-size: 16px; }
+.topbar-brand .arco-typography { font-size: 11px; }
+.brand-mark { display: grid; width: 30px; height: 30px; place-items: center; border-radius: 9px; color: #fff; background: linear-gradient(135deg, #4259d9, #6d7ff0); font-weight: 800; }
+.topbar-divider { width: 1px; height: 25px; background: var(--color-border); }
+.product-switcher { color: #3a4760 !important; font-weight: 600; }
+.product-switcher-icon { display: inline-grid; width: 24px; height: 24px; place-items: center; border-radius: 7px; color: #fff; background: #525ee0; font-size: 12px; }
+.topbar-center { display: flex; min-width: 0; flex: 1; align-items: center; justify-content: center; gap: 14px; color: #76829a; font-size: 13px; }
+.running-status, .automation-status { display: inline-flex; align-items: center; gap: 7px; padding: 7px 10px; border-radius: 7px; background: #f7f8fb; white-space: nowrap; }
+.topbar-actions { display: flex; align-items: center; gap: 13px; white-space: nowrap; }
+.service-status { display: inline-flex; align-items: center; gap: 7px; color: #66748b; font-size: 12px; }
+.service-status i { width: 7px; height: 7px; border-radius: 50%; background: var(--color-success); box-shadow: 0 0 0 4px rgb(34 160 107 / 10%); }
+.top-user { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; }
+
+/* 三栏工作区 */
+.workspace-body { min-height: 0; flex: 1; overflow: hidden; }
+.primary-sidebar { height: 100%; border-right: 1px solid var(--color-border); background: #f8f9fc; }
+.primary-sidebar .arco-layout-sider-children { display: flex; height: 100%; flex-direction: column; }
+.sidebar-scroll { flex: 1; padding: 15px 10px; overflow-y: auto; }
+.sidebar-product { display: flex; align-items: center; gap: 8px; margin-bottom: 20px; padding: 9px 8px; font-size: 13px; white-space: nowrap; }
+.qianchuan-logo { display: grid; width: 25px; height: 25px; place-items: center; border-radius: 7px; color: #fff; background: #515fe3; font-size: 11px; }
+.nav-section-label { display: block; padding: 11px 11px 6px; color: #9aa4b4 !important; font-size: 11px; }
+.module-nav { width: 100%; border: 0 !important; background: transparent !important; }
+.module-nav .arco-menu-item { height: 38px; margin: 2px 0; border-radius: 7px; color: #657188; }
+.module-nav .arco-menu-selected { color: var(--color-primary); background: var(--color-primary-soft); font-weight: 600; }
+.nav-notice { display: inline-block; width: 6px; height: 6px; margin-left: 5px; border-radius: 50%; background: #ff7d00; vertical-align: top; }
+.sidebar-footer { padding: 12px; border-top: 1px solid var(--color-border); color: #a0a9b7; font-size: 10px; text-align: center; }
+.account-panel { height: 100%; border-right: 1px solid var(--color-border); background: #fff; }
+.account-panel .arco-layout-sider-children { display: flex; height: 100%; flex-direction: column; padding: 16px 14px 0; }
+.account-panel-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.account-panel-header h5 { margin: 0; font-size: 15px; }
+.account-selection-bar { display: flex; align-items: center; justify-content: space-between; min-height: 40px; }
+.account-list { flex: 1; margin: 0 -7px; overflow-y: auto; }
+.account-row { display: grid; width: 100%; grid-template-columns: 18px minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 11px 8px; border: 1px solid transparent; border-radius: 8px; color: inherit; background: transparent; text-align: left; }
+.account-row:hover { background: #f8f9fd; }
+.account-row.is-current { border-color: #d4dcff; background: #f2f4ff; }
+.account-row input { width: 15px; height: 15px; accent-color: var(--color-primary); }
+.account-copy { display: grid; min-width: 0; gap: 3px; }
+.account-copy strong { overflow: hidden; color: #3e4b64; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+.account-copy small { overflow: hidden; color: #98a2b2; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.account-state { display: grid; gap: 3px; text-align: right; }
+.account-state b { color: var(--color-success); font-size: 10px; }
+.account-state small { color: var(--color-primary); font-size: 10px; }
+.account-list-empty { padding: 42px 10px; color: #9ba5b4; text-align: center; }
+.account-panel-footer { display: flex; min-height: 45px; align-items: center; justify-content: space-between; border-top: 1px solid var(--color-border); font-size: 11px; }
+
+/* 推广监控 */
+.workspace-content { min-width: 0; height: 100%; overflow: auto; background: var(--color-page); }
+.monitoring-view { min-width: 900px; min-height: 100%; padding: 0 18px 24px; }
+.page-tabs-header { display: grid; min-height: 68px; grid-template-columns: auto 1fr auto; align-items: center; gap: 24px; border-bottom: 1px solid var(--color-border); }
+.page-tabs { display: flex; gap: 4px; }
+.monitoring-summary { color: #78859a !important; font-size: 13px; }
+.monitoring-summary b { color: var(--color-primary); }
+.page-header-links { display: flex; }
+.monitor-panel { margin-top: 16px; border: 1px solid var(--color-border); border-radius: 10px; box-shadow: var(--shadow-panel); }
+.monitor-panel > .arco-card-body { padding: 16px; }
+.monitor-filter-form { display: grid; grid-template-columns: repeat(4, minmax(145px, 1fr)); gap: 14px 16px; padding-bottom: 16px; border-bottom: 1px solid var(--color-border); }
+.monitor-filter-form.is-collapsed > label:nth-of-type(n + 5) { display: none; }
+.monitor-filter-form label { display: grid; min-width: 0; gap: 7px; color: #6c7890; font-size: 12px; }
+.monitor-filter-form .arco-select, .monitor-filter-form .arco-picker { width: 100%; }
+.date-filter-field { grid-column: span 2; }
+.filter-actions { display: flex; align-items: flex-end; gap: 8px; }
+.monitor-toolbar { display: flex; min-height: 57px; align-items: center; justify-content: space-between; gap: 18px; }
+.batch-actions { display: flex; align-items: center; gap: 3px; white-space: nowrap; }
+.batch-actions i { width: 1px; height: 18px; margin: 0 5px; background: var(--color-border); }
+.monitor-table-card { overflow: hidden; border: 1px solid var(--color-border); border-radius: 8px; }
+.monitor-table-card .arco-table-th { color: #657188; background: #f7f8fb; font-size: 12px; font-weight: 600; }
+.monitor-table-card .arco-table-td { color: #536079; font-size: 12px; }
+.monitor-table-card .arco-table-cell { padding: 11px 10px; }
+.plan-main { display: flex; min-width: 0; align-items: center; gap: 10px; }
+.product-image { display: grid; width: 38px; height: 38px; flex: 0 0 auto; place-items: center; overflow: hidden; border: 1px solid #e5e9f0; border-radius: 7px; color: #9aa4b4; background: #f3f5f8; }
+.product-image img { width: 100%; height: 100%; object-fit: cover; }
+.plan-copy { display: grid; min-width: 0; gap: 4px; }
+.plan-copy strong { overflow: hidden; color: #3b4962; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+.plan-copy span { overflow: hidden; color: #8b96a7; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.execution-log { display: grid; gap: 3px; }
+.execution-log small { color: #929cac; }
+.pagination { display: flex; min-height: 55px; align-items: center; justify-content: space-between; gap: 16px; padding: 0 14px; border-top: 1px solid var(--color-border); color: #8893a5; font-size: 12px; }
+.pagination > div:first-child { display: flex; align-items: center; gap: 12px; }
+.sync-state, .query-range { color: #9ca6b5; }
+.feature-placeholder { display: grid; min-height: calc(100vh - 125px); align-content: center; justify-items: center; gap: 14px; padding: 48px; text-align: center; }
+.placeholder-icon { display: grid; width: 64px; height: 64px; place-items: center; border-radius: 18px; color: var(--color-primary); background: var(--color-primary-soft); font-size: 26px; font-weight: 700; }
+.feature-placeholder h2 { margin: 3px 0 0; }
+.feature-placeholder .arco-btn { margin-top: 8px; }
+
+@media (max-width: 1280px) {
+  .topbar-center { display: none; }
+  .monitor-filter-form { grid-template-columns: repeat(3, minmax(145px, 1fr)); }
+  .monitor-toolbar { align-items: flex-start; flex-direction: column; padding: 10px 0; }
+}
+.menu-item-content { display: inline-flex; align-items: center; gap: 9px; }

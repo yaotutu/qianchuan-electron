@@ -1,6 +1,19 @@
 # 电小奇 · 千川 Electron 客户端
 
-当前客户端负责桌面登录交互，不直接访问巨量接口。敏感 OAuth 操作由配套的 `qianchuan-oauth-callback` 服务端完成。
+当前客户端负责桌面登录交互和千川超级商品卡工作台展示，不直接访问巨量接口。敏感 OAuth 操作由配套的 `qianchuan-oauth-callback` 服务端完成。
+
+## 当前技术栈
+
+```text
+Electron + React + TypeScript + Vite
+Arco Design          后台界面组件
+TanStack Query       服务端数据、请求状态和缓存
+Zustand              本地工作台 UI 状态
+Zod                  IPC 返回数据的运行时校验
+React Router         Electron 本地页面路由
+```
+
+本次迁移采用“先迁移 Renderer、保留主进程协议”的方式，现有服务端和 OAuth 接口不需要同步大改。旧版 `src/index.html`、`src/renderer.js`、`src/styles.css` 暂时保留，便于排查和回退；应用启动时使用新的 React 构建产物。
 
 ## 启动
 
@@ -25,44 +38,54 @@ npm start
 QIANCHUAN_OAUTH_SERVER_URL=https://你的服务端域名 npm start
 ```
 
+常用开发命令：
+
+```bash
+npm run typecheck       # TypeScript 类型检查
+npm run build:renderer  # 构建 React Renderer
+npm test                # 运行单元测试
+```
+
 ## 登录流程
 
-1. Electron 主进程请求 `/oauth/oceanengine/start?format=json`；
-2. 主进程保存服务端返回的 `attemptId`，并使用系统浏览器打开授权 URL；
-3. 巨量回调到服务端后，服务端换 Token 并获取一条 User 信息；
-4. 主进程轮询 `/oauth/result?attempt_id=...`；
-5. 页面只展示脱敏后的用户信息；登录成功后，自动通过主进程查询商品投放计划。
+1. React 通过 TanStack Query 调用 preload 暴露的健康检查和当前授权接口；
+2. 用户点击登录后，Electron 主进程请求 `/oauth/oceanengine/start?format=json`；
+3. 主进程保存服务端返回的 `attemptId`，并使用系统浏览器打开授权 URL；
+4. 巨量回调到服务端后，服务端换 Token 并获取用户信息；
+5. React 通过 Query 定时轮询 `/oauth/result?attempt_id=...`；
+6. 登录成功后，工作台使用服务端返回的广告主账号列表和商品投放计划。
 
-客户端不使用 `/oauth/latest-result`，因为全局“最近一次结果”可能导致多个授权请求互相串号。该接口仅为旧客户端兼容保留。
+Electron Renderer 不接触 App Secret、Access Token、Refresh Token、`auth_code` 或完整授权 URL。
 
 ## 商品投放计划
 
-登录成功后，工作台会展示当前授权范围内店铺的商品投放计划，支持：
+登录成功后，千川超级商品卡工作台展示授权店铺的商品投放计划，当前支持：
 
-- 按商品或计划名称关键词搜索；
-- 按投放状态筛选；
-- 在全域计划和乘方计划之间切换；
-- 查看消耗、支付 ROI、成交金额、支付订单数和创建时间；
-- 分页和手动刷新。
-
-Electron Renderer 不直连巨量接口。筛选参数先由 preload 传给主进程，主进程再调用自有服务端的 `/api/qianchuan/product-plans`；Token 始终只保存在服务端。
-
-## 安全边界
-
-- `nodeIntegration` 关闭；
-- `contextIsolation` 开启；
-- Renderer 不读取 `.env`；
-- Renderer 不接触 App Secret、Access Token、Refresh Token、`auth_code` 或完整授权 URL；
-- 配置缺失、旧服务和服务不可用分别由主进程转换为用户可理解的状态，不显示具体环境变量名；
-- 登录结果按本次 `attemptId` 隔离。
+- 账号搜索、当前账号切换和全选；
+- 关键词、投放状态、计划类型和创建时间筛选；
+- 推广监控管理和推广监控创建页面占位；
+- 计划分页、刷新、全选和状态展示；
+- 消耗、支付 ROI、创建时间等读取字段展示；
+- 计划启停、编辑、复制、删除等写操作暂时只保留界面入口并提示未接入，避免误操作真实投放计划。
 
 ## 目录
 
 ```text
 src/
-├── main.js       # 主进程、OAuth 服务端请求、系统浏览器、IPC
-├── preload.js    # 暴露最小且安全的 OAuth API
-├── renderer.js   # 登录交互、状态轮询、用户信息和计划列表展示
-├── styles.css    # 登录页和计划工作台样式
-└── index.html    # 页面入口
+├── main.js                         # Electron 主进程、OAuth 请求和 IPC
+├── preload.js                      # 安全桥，按 auth / promotionMonitor 分组暴露能力
+├── index.html                      # 旧版页面入口，暂作回退参考
+├── renderer.js                     # 旧版 Renderer，暂作回退参考
+├── styles.css                      # 旧版样式，暂作回退参考
+└── renderer/                       # React Renderer 新入口
+    ├── main.tsx                    # React 根节点
+    ├── App.tsx                     # 主题和认证边界
+    ├── app/                        # Provider、QueryClient、Zustand Store
+    ├── layouts/WorkspaceLayout/    # 顶栏、产品导航、账号栏和内容容器
+    ├── features/auth/              # OAuth 状态恢复、登录轮询和登录页
+    ├── features/promotion-monitor/ # 推广监控列表、筛选和分页
+    ├── shared/api/                 # preload API 适配和 Zod 校验
+    ├── shared/model/               # 业务类型、数据 Schema
+    ├── shared/utils/               # 金额、日期和指标格式化
+    └── styles/                     # 设计 Token 和全局布局样式
 ```

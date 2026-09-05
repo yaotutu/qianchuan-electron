@@ -294,7 +294,7 @@ const createWindow = () => {
     return { action: "deny" };
   });
 
-  void mainWindow.loadFile(path.join(__dirname, "index.html"));
+  void mainWindow.loadFile(path.join(__dirname, "../dist/index.html"));
 };
 
 app.whenReady().then(() => {
