@@ -155,15 +155,22 @@ const showLogin = () => {
 }
 
 /**
- * OAuth 结果只包含广告主 ID，不含店铺名称，因此先以 ID 作为选择项。
+ * 使用服务端发现的千川广告主名称渲染选择项。
  * 服务端仍会二次校验该 ID 是否属于当前授权，不能通过页面伪造越权查询。
  */
-const renderAdvertiserOptions = (advertiserIds = []) => {
+const renderAdvertiserOptions = (advertiserIds = [], advertiserAccounts = []) => {
+  const accountById = new Map(
+    advertiserAccounts
+      .filter((account) => account?.advertiserId)
+      .map((account) => [String(account.advertiserId), account])
+  )
   const normalizedIds = [...new Set(advertiserIds.map(String).filter(Boolean))]
   const options = normalizedIds.map((advertiserId, index) => {
+    const account = accountById.get(advertiserId)
+    const name = account?.advertiserName || account?.shopName
     const option = document.createElement('option')
     option.value = advertiserId
-    option.textContent = `店铺 ${advertiserId}`
+    option.textContent = name ? `${name}（${advertiserId}）` : `店铺 ${advertiserId}`
     option.selected = index === 0
     return option
   })
@@ -200,7 +207,10 @@ const renderUser = (result) => {
   elements.loginButton.disabled = false
   buttonAction = 'login'
 
-  renderAdvertiserOptions(Array.isArray(token.advertiserIds) ? token.advertiserIds : [])
+  renderAdvertiserOptions(
+    Array.isArray(token.advertiserIds) ? token.advertiserIds : [],
+    Array.isArray(token.advertiserAccounts) ? token.advertiserAccounts : []
+  )
   showWorkspace()
   void loadPlans({ page: 1 })
 }
