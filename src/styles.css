@@ -375,3 +375,97 @@ button:disabled { cursor: not-allowed; opacity: 0.5; }
 .monitor-filter-form.is-collapsed .monitor-filter-field:nth-of-type(n + 4),
 .monitor-filter-form.is-collapsed .date-filter-field { display: none; }
 .monitor-filter-form.is-collapsed .filter-actions { grid-column: span 1; }
+
+/*
+ * 可读性调整：当前版本只聚焦千川超级商品卡，界面不再压缩成“缩略图”密度。
+ * 这里统一放大导航、账号栏、筛选器和表格的字号，并适当增加内容间距，
+ * 让长时间查看投放计划时更容易扫读；平台数据本身和交互逻辑不受影响。
+ */
+.topbar { height: 56px; flex-basis: 56px; gap: 15px; padding-inline: 18px; }
+.brand-mark { width: 32px; height: 32px; font-size: 16px; }
+.topbar-brand { gap: 9px; }
+.topbar-brand strong { font-size: 15px; }
+.version-text { font-size: 12px; }
+.product-switcher, .running-status, .automation-status { height: 36px; gap: 8px; padding-inline: 11px; font-size: 14px; }
+.product-switcher-icon { width: 21px; height: 21px; font-size: 11px; }
+.running-icon { font-size: 16px; }
+.topbar-actions { gap: 12px; }
+.service-status, .top-user { font-size: 12px; }
+.mini-avatar { width: 24px; height: 24px; font-size: 11px; }
+.topbar-button { padding: 8px 12px; font-size: 12px; }
+
+.workspace { grid-template-columns: 198px 270px minmax(0, 1fr); }
+.primary-sidebar { background: #f8faff; }
+.sidebar-scroll { padding: 14px 0 18px; }
+.qianchuan-module { margin: 4px 8px 0; padding: 9px 7px 16px; border-radius: 8px; }
+.product-nav-heading { min-height: 38px; gap: 8px; padding-inline: 7px; }
+.product-nav-heading strong { font-size: 14px; }
+.qianchuan-logo { width: 22px; height: 21px; gap: 3px; }
+.qianchuan-logo i { width: 4px; }
+.qianchuan-logo i:nth-child(1) { height: 8px; }
+.qianchuan-logo i:nth-child(2) { height: 13px; }
+.qianchuan-logo i:nth-child(3) { height: 17px; }
+.nav-section-label { gap: 9px; margin: 15px 2px 7px; font-size: 12px; }
+.module-nav { gap: 2px 4px; }
+.module-nav button { min-height: 34px; padding-inline: 2px; font-size: 12px; }
+.nav-notice { width: 5px; height: 5px; margin-bottom: 4px; }
+.sidebar-footer { padding: 13px 16px; font-size: 11px; }
+
+.account-panel-header { height: 60px; flex-basis: 60px; padding-inline: 20px; }
+.account-panel-header h2 { font-size: 17px; }
+.account-panel-header button { font-size: 13px; }
+.account-search { height: 42px; margin: 10px 18px 6px; padding-inline: 12px; }
+.account-search input { font-size: 13px; }
+.account-selection-bar { min-height: 38px; padding-inline: 19px; font-size: 12px; }
+.account-selection-bar button { font-size: 13px; }
+.account-row { min-height: 75px; gap: 11px; padding: 11px 16px 11px 19px; }
+.account-row > input { width: 18px; height: 18px; }
+.account-copy { gap: 5px; }
+.account-copy strong { font-size: 14px; }
+.account-copy small { font-size: 12px; }
+.account-state { gap: 5px; font-size: 12px; }
+.account-state small { font-size: 11px; }
+.account-list-empty { font-size: 13px; }
+.account-panel-footer { padding: 14px 19px; font-size: 12px; }
+.account-panel-footer button { font-size: 13px; }
+
+.page-tabs-header { min-height: 62px; padding-inline: 24px; }
+.page-tabs { gap: 28px; }
+.page-tabs button { min-height: 62px; font-size: 14px; }
+.monitoring-summary { font-size: 13px; }
+.page-header-links { gap: 20px; font-size: 13px; }
+.workspace-content { padding: 0 24px 24px; }
+.monitor-filter-form { gap: 14px 18px; padding-top: 17px; }
+.monitor-filter-field label, .date-filter-field label { margin-bottom: 7px; font-size: 12px; }
+.monitor-filter-field input, .monitor-filter-field select, .date-filter-field input { height: 42px; padding-inline: 14px; font-size: 13px; }
+.filter-actions { gap: 16px; }
+.search-button { min-width: 92px; height: 42px; font-size: 13px; }
+.reset-button, .collapse-button { font-size: 13px; }
+.monitor-toolbar { min-height: 52px; padding: 12px 0; }
+.batch-actions, .monitor-options { gap: 14px; }
+.batch-actions button, .monitor-options button, .monitor-options label, .monitor-options select { font-size: 12px; }
+.switch-control { width: 34px; height: 19px; }
+.switch-control span { width: 15px; height: 15px; }
+.switch-control[aria-checked="true"] span { left: 17px; }
+.plans-alert { font-size: 12px; }
+.monitor-table th { height: 46px; padding-inline: 14px; font-size: 12px; }
+.monitor-table td { min-height: 76px; padding: 13px 14px; font-size: 12px; }
+.checkbox-column { width: 48px; }
+.checkbox-column input, .plan-checkbox { width: 18px; height: 18px; }
+.plan-main { gap: 11px; }
+.plan-copy { gap: 5px; }
+.plan-copy strong { font-size: 14px; }
+.plan-copy span, .execution-log small { font-size: 11px; }
+.account-column, .execution-log { font-size: 12px; }
+.table-empty { padding: 44px 20px; font-size: 13px; }
+.pagination { min-height: 54px; font-size: 12px; }
+.page-button { font-size: 12px; }
+
+@media (max-width: 1280px) {
+  .workspace { grid-template-columns: 180px 250px minmax(0, 1fr); }
+  .workspace-content { padding-inline: 18px; }
+}
+
+@media (max-width: 1050px) {
+  .workspace { grid-template-columns: 72px 230px minmax(0, 1fr); }
+}
