@@ -7,26 +7,47 @@
       http-equiv="Content-Security-Policy"
       content="default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data: https:"
     />
-    <title>电小奇 · 千川工作台</title>
+    <title>电小奇 · 千川超级商品卡</title>
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
     <div class="app-shell">
       <header class="topbar">
-        <div class="brand" aria-label="电小奇千川工作台">
+        <div class="topbar-brand" aria-label="电小奇客户端">
           <span class="brand-mark">奇</span>
-          <div class="brand-copy">
-            <strong>电小奇</strong>
-            <small>千川投放管理工作台</small>
+          <strong>电小奇客户端</strong>
+          <span class="version-text">V0.1.0</span>
+        </div>
+        <span class="topbar-divider" aria-hidden="true"></span>
+        <button class="product-switcher" type="button" data-coming-soon="产品切换将在接入其他业务模块后开放。">
+          <span class="product-switcher-icon">川</span>
+          <span>千川超级商品卡</span>
+          <span class="chevron">⌄</span>
+        </button>
+
+        <div class="topbar-center">
+          <div class="running-status">
+            <span class="running-icon">◉</span>
+            <span><b id="topRunningCount">0</b> 项推广计划监控中</span>
+            <span class="chevron">⌄</span>
+          </div>
+          <div class="automation-status">
+            <span class="automation-icon">▣</span>
+            <span>暂无运行中自动化流程</span>
+            <span class="chevron">⌄</span>
           </div>
         </div>
 
         <div class="topbar-actions">
           <div id="serviceStatus" class="service-status" data-state="checking">
             <span class="status-dot" aria-hidden="true"></span>
-            <span id="serviceStatusText">正在检测登录服务</span>
+            <span id="serviceStatusText">正在检测服务</span>
           </div>
-          <button id="reauthorizeButton" class="ghost-button" type="button" hidden>重新授权</button>
+          <div class="top-user">
+            <span id="miniAvatar" class="mini-avatar">千</span>
+            <span id="miniUserName">千川用户</span>
+          </div>
+          <button id="reauthorizeButton" class="topbar-button" type="button" hidden>重新授权</button>
         </div>
       </header>
 
@@ -87,100 +108,109 @@
         </section>
 
         <section id="workspace" class="workspace" hidden>
-          <aside class="sidebar">
-            <div class="sidebar-group">
-              <p class="sidebar-section-label">投放管理</p>
-              <button class="nav-item is-active" type="button" aria-current="page">
-                <span class="nav-icon">▦</span>
-                <span>
-                  <strong>商品计划</strong>
-                  <small>计划列表与核心数据</small>
-                </span>
-              </button>
-            </div>
+          <aside class="primary-sidebar" aria-label="产品功能导航">
+            <div class="sidebar-scroll">
+              <section class="product-nav-group is-muted">
+                <button class="product-nav-heading" type="button" data-coming-soon="AI 自动化运营模块将在后续版本开放。">
+                  <span class="nav-heading-icon">智</span>
+                  <strong>AI自动化运营</strong>
+                  <span class="chevron">⌃</span>
+                </button>
+                <div class="compact-nav-grid">
+                  <span>多店铺货</span><span>工作流</span>
+                  <span>云库建图</span><span>AI修图</span>
+                  <span>无水印采集</span>
+                </div>
+              </section>
 
-            <div class="sidebar-account">
-              <div class="mini-user">
-                <span id="miniAvatar" class="mini-avatar">千</span>
-                <span class="mini-user-copy">
-                  <strong id="miniUserName">千川用户</strong>
-                  <small>已连接巨量千川</small>
-                </span>
-              </div>
-              <button id="sidebarReauthorizeButton" class="sidebar-link" type="button">管理授权</button>
+              <section class="product-nav-group is-muted">
+                <button class="product-nav-heading" type="button" data-coming-soon="抖店商品优化模块将在后续版本开放。">
+                  <span class="nav-heading-icon">优</span>
+                  <strong>抖店商品优化</strong>
+                  <span class="chevron">⌃</span>
+                </button>
+                <div class="compact-nav-grid">
+                  <span>店铺管理</span><span>下单绑定</span>
+                  <span>飞鸽管理</span><span>经营数据</span>
+                  <span>资金数据</span><span>违规管理</span>
+                  <span>售中管理</span><span>活动营销</span>
+                  <span>商品优化</span><span>批量上下架</span>
+                </div>
+              </section>
+
+              <section class="product-nav-group qianchuan-module">
+                <div class="product-nav-heading is-active">
+                  <span class="qianchuan-logo" aria-hidden="true"><i></i><i></i><i></i></span>
+                  <strong>千川超级商品卡</strong>
+                  <span class="chevron">⌃</span>
+                </div>
+
+                <div class="nav-section-label"><span></span><b>全域推广</b><span></span></div>
+                <nav class="module-nav" aria-label="全域推广功能">
+                  <button type="button" data-view="account-management">账号管理</button>
+                  <button type="button" data-view="promotion-management">推广管理<span class="nav-notice"></span></button>
+                  <button class="is-active" type="button" data-view="promotion-monitor" aria-current="page">推广监控</button>
+                  <button type="button" data-view="promotion-data">推广数据</button>
+                </nav>
+
+                <div class="nav-section-label"><span></span><b>千川乘方</b><span></span></div>
+                <nav class="module-nav" aria-label="千川乘方功能">
+                  <button type="button" data-view="multiplier-management">乘方管理<span class="nav-notice"></span></button>
+                  <button type="button" data-view="multiplier-monitor">乘方监控</button>
+                  <button type="button" data-view="multiplier-data">乘方数据</button>
+                </nav>
+              </section>
             </div>
+            <footer class="sidebar-footer">千川超级商品卡 · 内测版</footer>
+          </aside>
+
+          <aside class="account-panel" aria-label="千川账号选择">
+            <header class="account-panel-header">
+              <h2>账号选择</h2>
+              <button id="sidebarReauthorizeButton" type="button">新账号登录</button>
+            </header>
+            <label class="account-search">
+              <span aria-hidden="true">⌕</span>
+              <input id="accountSearchInput" type="search" placeholder="请输入千川/店铺名" maxlength="100" />
+            </label>
+            <div class="account-selection-bar">
+              <button id="selectAllAccountsButton" type="button">选择全部</button>
+              <span>已选：<b id="selectedAccountsCount">0</b></span>
+            </div>
+            <div id="accountList" class="account-list"></div>
+            <footer class="account-panel-footer">
+              <span>千川超级商品卡</span>
+              <button type="button" data-coming-soon="订购和套餐管理将在商业化模块接入后开放。">订购</button>
+            </footer>
           </aside>
 
           <section class="workspace-content">
-            <div class="content-container">
-              <header class="workspace-heading">
-                <div>
-                  <div class="breadcrumb"><span>投放管理</span><b>/</b><strong>商品计划</strong></div>
-                  <h1>商品投放计划</h1>
-                  <p>查看授权店铺的投放状态与核心经营指标。</p>
+            <section id="monitoringView" class="monitoring-view">
+              <header class="page-tabs-header">
+                <div class="page-tabs" role="tablist" aria-label="推广监控页面">
+                  <button type="button" data-monitor-tab="create" role="tab">推广监控创建</button>
+                  <button class="is-active" type="button" data-monitor-tab="manage" role="tab" aria-selected="true">推广监控管理</button>
                 </div>
-                <button id="refreshPlansButton" class="secondary-button" type="button">
-                  <span aria-hidden="true">↻</span>刷新数据
-                </button>
+                <p class="monitoring-summary">
+                  <span class="summary-signal">⌁</span>
+                  <b id="planTotal">0</b> 项计划监控中，已为 <b id="protectedAccountCount">0</b> 个账号提供监控保障
+                </p>
+                <div class="page-header-links">
+                  <button type="button" data-coming-soon="升级计划将在套餐系统接入后开放。">体验升级计划</button>
+                  <button type="button" data-coming-soon="使用教程正在整理中。">使用教程</button>
+                </div>
               </header>
 
-              <section class="summary-grid" aria-label="计划数据概览">
-                <article class="summary-card summary-card-shop">
-                  <span class="summary-icon summary-icon-purple">店</span>
-                  <div class="summary-copy">
-                    <span>当前店铺</span>
-                    <strong id="currentAdvertiser">—</strong>
-                    <small id="currentAdvertiserMeta">尚未选择广告主</small>
-                  </div>
-                </article>
-                <article class="summary-card">
-                  <span class="summary-icon summary-icon-blue">计</span>
-                  <div class="summary-copy">
-                    <span>计划总数</span>
-                    <strong id="planTotal">—</strong>
-                    <small>当前筛选结果</small>
-                  </div>
-                </article>
-                <article class="summary-card">
-                  <span class="summary-icon summary-icon-orange">期</span>
-                  <div class="summary-copy">
-                    <span>查询范围</span>
-                    <strong id="queryRange">近 30 天</strong>
-                    <small>平台数据时间范围</small>
-                  </div>
-                </article>
-                <article class="summary-card">
-                  <span class="summary-icon summary-icon-green">更</span>
-                  <div class="summary-copy">
-                    <span>最近同步</span>
-                    <strong id="lastSyncedAt">—</strong>
-                    <small>手动或自动查询时间</small>
-                  </div>
-                </article>
-              </section>
-
-              <section class="filter-card" aria-labelledby="filterTitle">
-                <div class="section-heading">
-                  <div>
-                    <h2 id="filterTitle">筛选条件</h2>
-                    <p>组合筛选店铺、商品、状态和计划类型。</p>
-                  </div>
-                  <button id="resetFiltersButton" class="text-button" type="button">重置筛选</button>
-                </div>
-
-                <form id="planFilters" class="filter-grid">
-                  <label class="filter-field filter-field-shop">
-                    <span>授权店铺</span>
+              <div id="monitorManagementPanel" class="monitor-panel">
+                <form id="planFilters" class="monitor-filter-form">
+                  <label class="monitor-filter-field">
+                    <span>所属千川</span>
                     <select id="advertiserSelect" name="advertiser_id" aria-label="选择授权店铺">
-                      <option value="">自动选择</option>
+                      <option value="">全部账号</option>
                     </select>
                   </label>
-                  <label class="filter-field filter-field-search">
-                    <span>搜索商品或计划</span>
-                    <input id="keywordInput" name="keyword" type="search" placeholder="输入商品名称或计划名称" maxlength="100" />
-                  </label>
-                  <label class="filter-field">
-                    <span>投放状态</span>
+                  <label class="monitor-filter-field">
+                    <span>监控状态</span>
                     <select id="statusSelect" name="status">
                       <option value="ALL">全部状态</option>
                       <option value="DELIVERY_OK">投放中</option>
@@ -191,64 +221,146 @@
                       <option value="ALL_INCLUDE_DELETED">包含已删除</option>
                     </select>
                   </label>
-                  <label class="filter-field">
-                    <span>计划类型</span>
+                  <label class="monitor-filter-field monitor-filter-keyword">
+                    <span>计划信息</span>
+                    <input id="keywordInput" name="keyword" type="search" placeholder="请输入计划名称/ID" maxlength="100" />
+                  </label>
+                  <label class="monitor-filter-field">
+                    <span>条件范围</span>
                     <select id="sceneSelect" name="scene">
-                      <option value="UNI_PROJECT">全域计划</option>
-                      <option value="OVERALL_PROJECT">乘方计划</option>
+                      <option value="UNI_PROJECT">全域推广</option>
+                      <option value="OVERALL_PROJECT">千川乘方</option>
                     </select>
                   </label>
-                  <button class="filter-submit" type="submit">查询</button>
+                  <label class="monitor-filter-field">
+                    <span>监控规则</span>
+                    <select id="ruleSelect" name="rule">
+                      <option value="ALL">全部规则</option>
+                      <option value="ROI">ROI 监控</option>
+                      <option value="COST">消耗监控</option>
+                      <option value="BUDGET">预算监控</option>
+                    </select>
+                  </label>
+                  <label class="monitor-filter-field">
+                    <span>执行操作</span>
+                    <select id="operationSelect" name="operation">
+                      <option value="ALL">全部操作</option>
+                      <option value="PAUSE">暂停计划</option>
+                      <option value="ENABLE">开启计划</option>
+                      <option value="NOTICE">仅通知</option>
+                    </select>
+                  </label>
+                  <div class="monitor-filter-field date-filter-field">
+                    <span>创建时间</span>
+                    <div class="date-range-control">
+                      <input id="startDateInput" name="start_date" type="date" aria-label="开始时间" />
+                      <b>至</b>
+                      <input id="endDateInput" name="end_date" type="date" aria-label="结束时间" />
+                    </div>
+                  </div>
+                  <div class="filter-actions">
+                    <button class="search-button" type="submit"><span>⌕</span>搜索</button>
+                    <button id="resetFiltersButton" class="reset-button" type="button"><span>↻</span>重置</button>
+                    <button id="collapseFiltersButton" class="collapse-button" type="button">收起</button>
+                  </div>
                 </form>
-              </section>
 
-              <div id="plansError" class="plans-alert" role="alert" hidden></div>
-
-              <section class="table-card" aria-labelledby="planTableTitle">
-                <div class="table-headline">
-                  <div>
-                    <h2 id="planTableTitle">计划列表</h2>
-                    <span id="paginationSummary">—</span>
+                <div class="monitor-toolbar">
+                  <div class="batch-actions">
+                    <span>已勾选 <b id="selectedPlanCount">0</b> 项监控</span>
+                    <i></i>
+                    <button type="button" data-batch-action="enable">▶ 批量开启</button>
+                    <button class="is-danger" type="button" data-batch-action="disable">⊙ 批量停止</button>
+                    <button class="is-danger" type="button" data-batch-action="delete">♙ 批量删除</button>
+                    <button type="button" data-batch-action="group">✧ 加入分组</button>
                   </div>
-                  <span id="planLoadingText" class="sync-state">—</span>
-                </div>
-
-                <div class="table-scroll">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th class="plan-column">计划 / 商品</th>
-                        <th>状态</th>
-                        <th>类型</th>
-                        <th class="numeric-column">消耗</th>
-                        <th class="numeric-column">支付 ROI</th>
-                        <th class="numeric-column">成交金额</th>
-                        <th class="numeric-column">订单</th>
-                        <th>创建时间</th>
-                      </tr>
-                    </thead>
-                    <tbody id="plansTableBody"></tbody>
-                  </table>
-                  <div id="plansEmpty" class="plans-empty" hidden>
-                    <div class="empty-icon">⌁</div>
-                    <h3>暂时没有商品投放计划</h3>
-                    <p>可以调整筛选条件，或确认巨量后台已有商品计划。</p>
+                  <div class="monitor-options">
+                    <label>监控间隔：
+                      <select id="monitorIntervalSelect">
+                        <option value="1">1分钟</option>
+                        <option value="5">5分钟</option>
+                        <option value="10">10分钟</option>
+                      </select>
+                    </label>
+                    <label class="switch-label">
+                      自动清理失效监控
+                      <button id="autoCleanupSwitch" class="switch-control" type="button" role="switch" aria-checked="false"><span></span></button>
+                    </label>
+                    <button id="refreshPlansButton" class="refresh-button" type="button">↻ 刷新</button>
                   </div>
                 </div>
 
-                <footer class="pagination">
-                  <span>数据来自巨量千川开放平台</span>
-                  <div class="pagination-actions">
-                    <button id="previousPageButton" class="page-button" type="button">上一页</button>
-                    <span id="paginationPage">1 / 1</span>
-                    <button id="nextPageButton" class="page-button" type="button">下一页</button>
+                <div id="plansError" class="plans-alert" role="alert" hidden></div>
+
+                <section class="monitor-table-card" aria-labelledby="planTableTitle">
+                  <div class="table-scroll">
+                    <table class="monitor-table">
+                      <thead>
+                        <tr>
+                          <th class="checkbox-column"><input id="selectAllPlansCheckbox" type="checkbox" aria-label="选择当前页全部计划" /></th>
+                          <th id="planTableTitle" class="monitor-plan-column">监控计划名 <span class="column-note">分组 ▾</span></th>
+                          <th>所属千川</th>
+                          <th>监控状态</th>
+                          <th>分组名</th>
+                          <th>执行日志</th>
+                          <th class="operation-column">操作</th>
+                        </tr>
+                      </thead>
+                      <tbody id="plansTableBody"></tbody>
+                    </table>
+                    <div id="plansEmpty" class="plans-empty" hidden>
+                      <div class="empty-icon">⌁</div>
+                      <h3>暂时没有推广监控计划</h3>
+                      <p>可以调整筛选条件，或确认巨量后台已有商品计划。</p>
+                    </div>
                   </div>
-                </footer>
+
+                  <footer class="pagination">
+                    <div>
+                      <span id="paginationSummary">—</span>
+                      <span id="planLoadingText" class="sync-state">—</span>
+                      <span id="queryRange" class="query-range" title="">—</span>
+                      <span id="lastSyncedAt" hidden>—</span>
+                    </div>
+                    <div class="pagination-actions">
+                      <button id="previousPageButton" class="page-button" type="button">上一页</button>
+                      <span id="paginationPage">1 / 1</span>
+                      <button id="nextPageButton" class="page-button" type="button">下一页</button>
+                    </div>
+                  </footer>
+                </section>
+              </div>
+
+              <section id="monitorCreatePanel" class="feature-placeholder" hidden>
+                <span class="placeholder-icon">＋</span>
+                <h2>推广监控创建</h2>
+                <p>页面结构已经预留。下一阶段接入监控规则、执行动作和计划创建接口。</p>
+                <button type="button" data-monitor-tab="manage">返回监控管理</button>
               </section>
-            </div>
+            </section>
+
+            <section id="featurePlaceholderView" class="feature-placeholder feature-placeholder-page" hidden>
+              <span id="placeholderIcon" class="placeholder-icon">川</span>
+              <h2 id="placeholderTitle">功能建设中</h2>
+              <p id="placeholderDescription">该功能已经进入千川超级商品卡产品规划，将在后续接入对应接口。</p>
+              <div class="placeholder-roadmap">
+                <span>页面框架已就绪</span>
+                <span>等待平台接口接入</span>
+                <span>保持与推广监控一致的账号体系</span>
+              </div>
+              <button id="backToMonitorButton" type="button">返回推广监控</button>
+            </section>
           </section>
         </section>
       </main>
+
+      <div id="appToast" class="app-toast" role="status" aria-live="polite" hidden></div>
+
+      <!-- 登录详情节点保留给授权状态渲染，工作台内不直接展示敏感授权信息。 -->
+      <div class="visually-hidden" aria-hidden="true">
+        <span id="currentAdvertiser">—</span>
+        <span id="currentAdvertiserMeta">尚未选择广告主</span>
+      </div>
     </div>
     <script src="./renderer.js"></script>
   </body>
