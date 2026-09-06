@@ -6,7 +6,12 @@ type AuthServiceDependencies = {
   now?: () => Date
 }
 
-const REQUIRED_SERVER_CAPABILITIES = ['oauth-attempt-result', 'current-authorization', 'product-plan-list']
+const REQUIRED_SERVER_CAPABILITIES = [
+  'oauth-attempt-result',
+  'current-authorization',
+  'product-plan-list',
+  'product-plan-detail',
+]
 
 /**
  * 登录尝试状态只存在于 Electron 主进程内存中。

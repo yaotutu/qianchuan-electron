@@ -2,10 +2,12 @@ import { ZodError } from 'zod'
 import {
   authorizationSchema,
   healthSchema,
+  promotionPlanDetailResultSchema,
   promotionPlanResultSchema,
   monitorTaskListResultSchema,
   monitorTaskMutationResultSchema,
   monitorTaskRunResultSchema,
+  type PromotionPlanDetailInput,
   type PromotionPlanFilters,
   type MonitorTaskFilters,
   type MonitorTaskCreateInput,
@@ -57,6 +59,10 @@ export const qianchuanApi = {
   listPromotionPlans: (filters: PromotionPlanFilters) =>
     runBridgeRequest('读取商品投放计划', async () =>
       promotionPlanResultSchema.parse(await getBridge().promotionMonitor.listPlans(filters)),
+    ),
+  getPromotionPlanDetail: (input: PromotionPlanDetailInput) =>
+    runBridgeRequest('读取推广计划详情', async () =>
+      promotionPlanDetailResultSchema.parse(await getBridge().promotionMonitor.getPlanDetail(input)),
     ),
   listMonitorTasks: (filters: MonitorTaskFilters) =>
     runBridgeRequest('读取本地监控任务', async () =>

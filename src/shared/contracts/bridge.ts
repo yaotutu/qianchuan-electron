@@ -4,7 +4,7 @@ import type {
   MonitorTaskStatus,
   MonitorTaskUpdateInput,
 } from './monitor-task'
-import type { PromotionPlanFilters } from './promotion-plan'
+import type { PromotionPlanDetailInput, PromotionPlanFilters } from './promotion-plan'
 
 /** Renderer 可见的全部能力清单；不暴露 ipcRenderer、shell 或任何 Node.js API。 */
 export type QianchuanBridge = {
@@ -16,6 +16,7 @@ export type QianchuanBridge = {
   }
   promotionMonitor: {
     listPlans: (filters: PromotionPlanFilters) => Promise<unknown>
+    getPlanDetail: (input: PromotionPlanDetailInput) => Promise<unknown>
     listTasks: (filters: MonitorTaskFilters) => Promise<unknown>
     createTask: (input: MonitorTaskCreateInput) => Promise<unknown>
     updateTask: (taskId: string, input: MonitorTaskUpdateInput) => Promise<unknown>

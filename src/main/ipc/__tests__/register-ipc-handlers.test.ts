@@ -27,7 +27,7 @@ describe('IPC 输入边界', () => {
         getCurrentAuthorization: vi.fn(),
         getHealth: vi.fn(),
       },
-      promotionPlanService: { list: vi.fn(), getAllForMonitor: vi.fn() },
+      promotionPlanService: { list: vi.fn(), getDetail: vi.fn(), getAllForMonitor: vi.fn() },
       monitorTaskService: {
         list: vi.fn(),
         create,
@@ -56,7 +56,7 @@ describe('IPC 输入边界', () => {
         getCurrentAuthorization: vi.fn(),
         getHealth: vi.fn(),
       },
-      promotionPlanService: { list, getAllForMonitor: vi.fn() },
+      promotionPlanService: { list, getDetail: vi.fn(), getAllForMonitor: vi.fn() },
       monitorTaskService: {
         list: vi.fn(),
         create: vi.fn(),
@@ -71,4 +71,30 @@ describe('IPC 输入边界', () => {
     await getHandler(IPC_CHANNELS.promotionPlan.list)({}, { advertiser_id: '186001', unsafe: 'value' })
     expect(list).toHaveBeenCalledWith({ advertiser_id: '186001' })
   })
+})
+
+it('校验计划详情输入后再调用应用服务', async () => {
+  const getDetail = vi.fn(async () => ({ ok: true }))
+  registerIpcHandlers({
+    authService: {
+      startLogin: vi.fn(),
+      getLoginStatus: vi.fn(),
+      getCurrentAuthorization: vi.fn(),
+      getHealth: vi.fn(),
+    },
+    promotionPlanService: { list: vi.fn(), getDetail, getAllForMonitor: vi.fn() },
+    monitorTaskService: {
+      list: vi.fn(),
+      create: vi.fn(),
+      update: vi.fn(),
+      delete: vi.fn(),
+      batchUpdateStatus: vi.fn(),
+      batchDelete: vi.fn(),
+      runNow: vi.fn(),
+    },
+  })
+
+  await getHandler(IPC_CHANNELS.promotionPlan.detail)({}, { advertiserId: '186001', adId: '9001', unsafe: 'drop' })
+
+  expect(getDetail).toHaveBeenCalledWith({ advertiserId: '186001', adId: '9001' })
 })

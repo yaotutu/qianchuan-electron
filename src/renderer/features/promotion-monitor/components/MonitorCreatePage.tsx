@@ -20,6 +20,7 @@ import { qianchuanApi } from '../../../shared/api/qianchuan-api'
 import type { AdvertiserAccount, MonitorRule, PromotionPlan } from '../../../../shared/contracts'
 import { showErrorFeedback, showSuccessFeedback } from '../../../shared/ui/feedback'
 import { getAccountName } from '../model'
+import { PromotionPlanDetailDrawer } from './PromotionPlanDetailDrawer'
 
 const { Title, Text } = Typography
 const METRIC_OPTIONS = [
@@ -47,6 +48,7 @@ export const MonitorCreatePage = ({ advertiserId, accounts, onAdvertiserChange, 
   const [groupName, setGroupName] = useState('')
   const [rule, setRule] = useState<MonitorRule>({ metric: 'ROI', operator: 'LT', threshold: 1.8 })
   const [intervalMinutes, setIntervalMinutes] = useState(5)
+  const [detailPlan, setDetailPlan] = useState<PromotionPlan | null>(null)
 
   const plansQuery = useQuery({
     queryKey: ['promotion-monitor', 'create-plans', advertiserId],
@@ -148,6 +150,15 @@ export const MonitorCreatePage = ({ advertiserId, accounts, onAdvertiserChange, 
       width: 120,
       render: (_, plan) => plan.status || '未知',
     },
+    {
+      title: '操作',
+      width: 96,
+      render: (_, plan) => (
+        <Button type="text" size="small" onClick={() => setDetailPlan(plan)}>
+          查看详情
+        </Button>
+      ),
+    },
   ]
 
   return (
@@ -209,6 +220,12 @@ export const MonitorCreatePage = ({ advertiserId, accounts, onAdvertiserChange, 
           scroll={{ y: 320 }}
         />
       </Card>
+      <PromotionPlanDetailDrawer
+        advertiserId={detailPlan?.advertiserId || advertiserId}
+        adId={detailPlan?.id}
+        visible={Boolean(detailPlan)}
+        onClose={() => setDetailPlan(null)}
+      />
       <Card className="monitor-create-card" bordered={false}>
         <div className="create-step-title">
           <span>2</span>

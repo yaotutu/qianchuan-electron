@@ -11,6 +11,7 @@ export const IPC_CHANNELS = {
   },
   promotionPlan: {
     list: 'plans:list',
+    detail: 'plans:detail',
   },
   monitorTask: {
     list: 'monitor-tasks:list',

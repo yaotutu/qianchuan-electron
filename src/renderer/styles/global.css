@@ -167,3 +167,47 @@ button { cursor: pointer; }
   .task-filter-form { grid-template-columns: repeat(3, minmax(150px, 1fr)); }
   .rule-form-grid { grid-template-columns: repeat(2, minmax(160px, 1fr)); }
 }
+
+/* 推广计划详情抽屉的只读状态与高级配置 */
+.plan-detail-loading {
+  display: flex;
+  min-height: 180px;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+.plan-detail-content {
+  padding-bottom: 20px;
+}
+.plan-detail-content .arco-divider {
+  margin: 22px 0 14px;
+  color: #66738b;
+  font-size: 13px;
+  font-weight: 600;
+}
+.plan-detail-titles {
+  margin: 12px 0 0;
+  line-height: 1.7;
+}
+.plan-detail-capabilities {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+/* 计划修改草稿只存在于详情抽屉内，用于展示字段级差异，不提供真实提交能力。 */
+.plan-edit-entry { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 14px; border: 1px solid #dbe7ff; border-radius: 8px; background: #f7faff; line-height: 1.7; }
+.plan-edit-preview { display: grid; gap: 14px; }
+.plan-edit-form { padding: 14px 14px 0; border: 1px solid var(--color-border); border-radius: 8px; background: #fafbfc; }
+.plan-edit-number-grid, .plan-edit-time-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.plan-edit-form .arco-input-number { width: 100%; }
+.plan-edit-result { display: grid; gap: 10px; margin-top: 2px; }
+.plan-edit-change-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.plan-edit-arrow { color: #9aa4b4; }
+.plan-edit-submit-placeholder { display: flex; align-items: center; gap: 12px; padding-top: 4px; }
+.plan-write-command-list { display: grid; gap: 8px; padding: 12px; border: 1px solid #cfe0ff; border-radius: 8px; background: #f6f9ff; }
+.plan-write-command { display: grid; gap: 6px; padding: 10px; border-radius: 6px; background: #fff; }
+.plan-write-command > div { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.plan-write-command .arco-typography code { overflow-wrap: anywhere; }
+.plan-write-confirmation { display: grid; gap: 6px; padding: 12px; border: 1px solid #ffe0a3; border-radius: 8px; background: #fffbf2; }

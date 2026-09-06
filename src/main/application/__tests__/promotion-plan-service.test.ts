@@ -42,3 +42,12 @@ describe('商品投放计划应用服务', () => {
     expect(request.mock.calls[0][0]).toContain('advertiser_id=186001')
   })
 })
+
+it('读取计划详情时只构造固定的 OAuth 服务路由', async () => {
+  const request = vi.fn<OAuthServerClient['request']>(async () => ({ ok: true, snapshot: {} }))
+  const service = createPromotionPlanService({ request })
+
+  await service.getDetail({ advertiserId: '186001', adId: '9001' })
+
+  expect(request).toHaveBeenCalledWith('/api/qianchuan/product-plan-detail?advertiser_id=186001&ad_id=9001')
+})

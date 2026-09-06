@@ -14,7 +14,12 @@ import {
   type MonitorTaskStatus,
   type MonitorTaskUpdateInput,
 } from '../../shared/contracts/monitor-task'
-import { promotionPlanFiltersSchema, type PromotionPlanFilters } from '../../shared/contracts/promotion-plan'
+import {
+  promotionPlanDetailInputSchema,
+  promotionPlanFiltersSchema,
+  type PromotionPlanDetailInput,
+  type PromotionPlanFilters,
+} from '../../shared/contracts/promotion-plan'
 import type { AuthService } from '../application/auth-service'
 import type { MonitorTaskService } from '../application/monitor-task-service'
 import type { PromotionPlanService } from '../application/promotion-plan-service'
@@ -70,6 +75,12 @@ export const registerIpcHandlers = ({
       promotionPlanService.list(
         promotionPlanFiltersSchema.parse(filters === undefined ? {} : filters) as Partial<PromotionPlanFilters>,
       ),
+    ),
+  )
+  ipcMain.handle(
+    IPC_CHANNELS.promotionPlan.detail,
+    handle((_event, input: unknown) =>
+      promotionPlanService.getDetail(promotionPlanDetailInputSchema.parse(input) as PromotionPlanDetailInput),
     ),
   )
   ipcMain.handle(

@@ -1,4 +1,4 @@
-import type { PromotionPlanFilters } from '../../shared/contracts/promotion-plan'
+import type { PromotionPlanDetailInput, PromotionPlanFilters } from '../../shared/contracts/promotion-plan'
 import type { MonitorPlanSnapshot } from '../monitor-scheduler'
 import type { JsonRecord, OAuthServerClient } from '../infrastructure/oauth-server-client'
 
@@ -62,6 +62,12 @@ export const createPromotionPlanService = (client: OAuthServerClient) => {
   const list = async (filters: PromotionPlanQuery = {}) =>
     client.request(`/api/qianchuan/product-plans?${createProductPlanSearch(filters).toString()}`)
 
+  /** 通过固定的 OAuth 服务路由读取单个计划快照，绝不接受任意 URL 或平台参数。 */
+  const getDetail = async ({ advertiserId, adId }: PromotionPlanDetailInput) => {
+    const search = new URLSearchParams({ advertiser_id: advertiserId, ad_id: adId })
+    return client.request(`/api/qianchuan/product-plan-detail?${search.toString()}`)
+  }
+
   /** 调度器按广告主批量读取计划，并在找到所有目标计划后提前停止翻页。 */
   const getAllForMonitor = async (advertiserId: string, promotionPlanIds: string[]): Promise<MonitorPlanSnapshot[]> => {
     const targetIds = new Set(promotionPlanIds)
@@ -93,7 +99,7 @@ export const createPromotionPlanService = (client: OAuthServerClient) => {
     return [...foundPlans.values()]
   }
 
-  return { list, getAllForMonitor }
+  return { list, getDetail, getAllForMonitor }
 }
 
 export type PromotionPlanService = ReturnType<typeof createPromotionPlanService>
