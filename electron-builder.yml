@@ -1,0 +1,43 @@
+# 安装包只包含生产运行所需的编译产物，避免把源码、测试和本地配置带入发布包。
+appId: com.dianxiaoqi.qianchuan
+productName: 电小奇·千川超级商品卡
+asar: true
+
+# 发布由 GitHub Actions 的 gh CLI 统一创建 Release，electron-builder 只负责生成安装包。
+publish: null
+
+directories:
+  output: release
+
+files:
+  - dist/**/*
+  - dist-electron/**/*
+  - package.json
+
+# 文件名使用 ASCII，降低不同系统、下载工具和发布 API 对中文路径兼容不一致的风险。
+artifactName: qianchuan-electron-${version}-${os}-${arch}.${ext}
+
+mac:
+  category: public.app-category.business
+  target:
+    - target: dmg
+      arch:
+        - x64
+        - arm64
+    - target: zip
+      arch:
+        - x64
+        - arm64
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+
+linux:
+  category: Office
+  target:
+    - target: AppImage
+      arch:
+        - x64

@@ -132,3 +132,13 @@ src/
     ├── shared/utils/               # 金额、日期和指标格式化
     └── styles/                     # 设计 Token 和全局布局样式
 ```
+
+## Dev 分支自动发布
+
+向 `dev` 分支推送提交后，GitHub Actions 会自动执行类型检查、单元测试和构建，并分别生成：
+
+- macOS：Intel/Apple Silicon 的 DMG 和 ZIP；
+- Windows：x64 NSIS 安装程序；
+- Linux：x64 AppImage。
+
+全部平台打包成功后，流水线会创建名为 `dev-<运行序号>` 的 GitHub 预发布版本并上传安装包。也可以在 GitHub Actions 页面通过 `workflow_dispatch` 手动运行。当前构建未配置代码签名证书，因此 macOS 和 Windows 首次打开时可能显示系统安全提示。

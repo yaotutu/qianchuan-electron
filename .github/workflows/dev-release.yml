@@ -1,0 +1,138 @@
+name: Dev Build and Release
+
+on:
+  push:
+    branches:
+      - dev
+  workflow_dispatch:
+
+# 默认任务只需要读取仓库内容；只有最后的 Release 任务需要写权限。
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Verify source
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check types
+        run: npm run typecheck
+
+      - name: Check formatting
+        run: npm run format:check
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build application
+        run: npm run build
+
+  package:
+    name: Package ${{ matrix.name }}
+    needs: verify
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS
+            runner: macos-latest
+            command: npm run package -- --mac
+          - name: Windows
+            runner: windows-latest
+            command: npm run package -- --win
+          - name: Linux
+            runner: ubuntu-latest
+            command: npm run package -- --linux
+    runs-on: ${{ matrix.runner }}
+    env:
+      # 当前流水线未配置签名证书。显式关闭自动发现，防止 Runner 环境变化导致意外签名或构建不稳定。
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build installers
+        run: ${{ matrix.command }}
+
+      - name: Upload installers
+        uses: actions/upload-artifact@v4
+        with:
+          name: installers-${{ matrix.name }}
+          path: |
+            release/*.dmg
+            release/*.zip
+            release/*.exe
+            release/*.AppImage
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    name: Publish GitHub prerelease
+    needs: package
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download installers
+        uses: actions/download-artifact@v4
+        with:
+          pattern: installers-*
+          path: release-assets
+          merge-multiple: true
+
+      - name: Publish prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          tag="dev-${GITHUB_RUN_NUMBER}"
+          title="Dev build #${GITHUB_RUN_NUMBER} (${GITHUB_SHA::7})"
+
+          cat > release-notes.md <<EOF
+          由 \`dev\` 分支提交自动构建的预发布版本。
+
+          - Commit: \`${GITHUB_SHA}\`
+          - Workflow: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}
+          EOF
+
+          # 重新运行同一次工作流时复用原 Release，并覆盖同名安装包，保证任务可重试。
+          if gh release view "${tag}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            gh release upload "${tag}" release-assets/* \
+              --repo "${GITHUB_REPOSITORY}" \
+              --clobber
+            gh release edit "${tag}" \
+              --repo "${GITHUB_REPOSITORY}" \
+              --title "${title}" \
+              --notes-file release-notes.md \
+              --prerelease
+          else
+            gh release create "${tag}" release-assets/* \
+              --repo "${GITHUB_REPOSITORY}" \
+              --target "${GITHUB_SHA}" \
+              --title "${title}" \
+              --notes-file release-notes.md \
+              --prerelease
+          fi
