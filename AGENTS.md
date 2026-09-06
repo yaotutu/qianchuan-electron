@@ -13,7 +13,9 @@
 
 - 产品业务逻辑优先放在 Electron 主进程，包括监控任务、规则、分组、启停、调度、执行日志和本地持久化。
 - 文件系统、系统浏览器、系统通知、定时调度和其他 Node.js 能力只能由主进程负责。
-- 主进程可以调用配套 OAuth 服务，但不得在客户端保存巨量应用 Secret、Access Token、Refresh Token、Cookie 或网页登录凭据。
+- 主进程负责获取短期有效的 Access Token，并直接调用巨量官方 `/open_api/...` 完成所有业务查询与写入；不得通过配套 OAuth 服务代理业务接口。
+- 巨量应用 Secret、Refresh Token、Cookie 和网页登录凭据只能保存在配套 OAuth 服务端。Access Token 只允许由 Electron 主进程在内存中短期持有，不得写入磁盘、日志、仓库或传递给 Renderer。
+- 调用巨量开放平台发现 Token 失效时，主进程应重新请求 OAuth 服务的 `/oauth/current` 获取自动刷新后的有效 Token，并对原业务请求做有边界的重试，禁止无限重试。
 - 应用关闭后不保证监控继续运行。只有用户明确要求云端运行或 24 小时运行时，才重新评估服务端调度方案。
 
 ### 2.2 Preload
@@ -28,13 +30,16 @@
 - Renderer 只负责页面展示、表单交互、查询状态和短生命周期 UI 状态，不直接读写本地文件。
 - 服务端数据与异步请求状态优先使用 TanStack Query；跨页面的纯 UI 状态可以使用 Zustand；不要重复维护同一份服务端数据。
 - 所有来自 IPC 或网络的外部数据都应在边界处通过 Zod 校验，组件内部使用校验后的类型。
-- 页面和组件不得直接拼接巨量平台鉴权请求，也不得接触授权 URL、`auth_code` 或 Token。
+- 页面和组件不得直接拼接巨量平台鉴权请求，也不得接触授权 URL、`auth_code`、Access Token 或 Refresh Token；所有巨量开放平台请求统一由 Electron 主进程发起。
 
 ### 2.4 OAuth 服务端
 
-- 配套服务端默认仅负责 OAuth 回调、Token 安全存储与自动刷新、广告主发现，以及代理必须使用 Access Token 的只读开放平台请求。
-- 不要把本地监控任务、业务 CRUD、调度策略或 UI 状态迁移到服务端。
-- 除非用户明确提出云端同步、多人共享或应用关闭后仍需运行，否则保持服务端最小化。
+- 配套服务端只负责巨量 OAuth 授权能力：生成授权入口、接收授权回调、安全保存 Token、使用 Refresh Token 自动刷新 Access Token，以及通过 `/oauth/current` 返回当前有效授权结果。
+- 登录流程固定为：Electron 请求 `/oauth/oceanengine/start` → 系统浏览器完成巨量授权 → 巨量回调 OAuth 服务 → OAuth 服务安全保存 Token → Electron 查询授权结果。
+- 日常业务流程固定为：Electron 主进程从 `/oauth/current` 获取短期有效的 Access Token → Electron 主进程直接调用巨量官方 `/open_api/...` → 主进程完成数据校验和业务处理 → 通过最小 IPC 向 Renderer 返回脱敏业务数据。
+- Token 过期流程固定为：Electron 主进程发现 Token 失效 → 请求 `/oauth/current` → OAuth 服务在服务端自动刷新 Token → 返回新的短期 Access Token → Electron 主进程重试业务请求。
+- OAuth 服务端不得承载推广计划查询、计划修改、监控任务、业务 CRUD、调度策略、规则执行或 UI 状态，也不得新增用于代理巨量业务接口的通用转发路由。
+- 除非用户明确提出云端同步、多人共享或应用关闭后仍需运行，否则所有业务逻辑、业务数据处理和本地监控调度都保留在 Electron。
 
 ## 3. 目录职责
 
