@@ -1,44 +1,44 @@
 import { contextBridge, ipcRenderer } from 'electron'
-// preload 变更会由开发脚本自动重新编译并重启 Electron，确保 IPC 契约与 Renderer 保持同步。
+
+import { IPC_CHANNELS } from './shared/contracts/ipc'
 import type {
+  MonitorTaskCreateInput,
   MonitorTaskFilters,
-  MonitorTaskInput,
+  MonitorTaskStatus,
   MonitorTaskUpdateInput,
-  PromotionPlanFilters,
-} from './renderer/shared/model/qianchuan'
+} from './shared/contracts/monitor-task'
+import type { PromotionPlanFilters } from './shared/contracts/promotion-plan'
 
 /**
- * preload 是渲染进程和主进程之间的安全边界。
- * 只暴露按业务划分的最小 API，Renderer 不拿到 ipcRenderer、shell 或 Node.js 能力。
+ * preload 是 Renderer 和主进程之间唯一的安全边界。
+ * 这里只暴露按业务划分的最小 API，页面无法直接取得 ipcRenderer、shell 或 Node.js 能力。
  */
 const authBridge = {
-  startLogin: () => ipcRenderer.invoke('oauth:start-login'),
-  getLoginStatus: () => ipcRenderer.invoke('oauth:get-status'),
-  getCurrent: () => ipcRenderer.invoke('oauth:get-current'),
-  getHealth: () => ipcRenderer.invoke('oauth:get-health'),
+  startLogin: () => ipcRenderer.invoke(IPC_CHANNELS.auth.startLogin),
+  getLoginStatus: () => ipcRenderer.invoke(IPC_CHANNELS.auth.getStatus),
+  getCurrent: () => ipcRenderer.invoke(IPC_CHANNELS.auth.getCurrent),
+  getHealth: () => ipcRenderer.invoke(IPC_CHANNELS.auth.getHealth),
 }
+
 const promotionMonitorBridge = {
-  listPlans: (filters: PromotionPlanFilters) => ipcRenderer.invoke('plans:list', filters),
-  listTasks: (filters: MonitorTaskFilters) => ipcRenderer.invoke('monitor-tasks:list', filters),
-  createTask: (input: MonitorTaskInput) => ipcRenderer.invoke('monitor-tasks:create', input),
+  listPlans: (filters: PromotionPlanFilters) => ipcRenderer.invoke(IPC_CHANNELS.promotionPlan.list, filters),
+  listTasks: (filters: MonitorTaskFilters) => ipcRenderer.invoke(IPC_CHANNELS.monitorTask.list, filters),
+  createTask: (input: MonitorTaskCreateInput) => ipcRenderer.invoke(IPC_CHANNELS.monitorTask.create, input),
   updateTask: (taskId: string, input: MonitorTaskUpdateInput) =>
-    ipcRenderer.invoke('monitor-tasks:update', taskId, input),
-  deleteTask: (taskId: string) => ipcRenderer.invoke('monitor-tasks:delete', taskId),
-  batchUpdateStatus: (taskIds: string[], status: 'RUNNING' | 'PAUSED') =>
-    ipcRenderer.invoke('monitor-tasks:batch-status', taskIds, status),
-  batchDelete: (taskIds: string[]) => ipcRenderer.invoke('monitor-tasks:batch-delete', taskIds),
-  runNow: (advertiserId: string) => ipcRenderer.invoke('monitor-tasks:run-now', advertiserId),
+    ipcRenderer.invoke(IPC_CHANNELS.monitorTask.update, taskId, input),
+  deleteTask: (taskId: string) => ipcRenderer.invoke(IPC_CHANNELS.monitorTask.delete, taskId),
+  batchUpdateStatus: (taskIds: string[], status: MonitorTaskStatus) =>
+    ipcRenderer.invoke(IPC_CHANNELS.monitorTask.batchStatus, taskIds, status),
+  batchDelete: (taskIds: string[]) => ipcRenderer.invoke(IPC_CHANNELS.monitorTask.batchDelete, taskIds),
+  runNow: (advertiserId: string) => ipcRenderer.invoke(IPC_CHANNELS.monitorTask.runNow, advertiserId),
   onChanged: (listener: () => void) => {
     const handler = () => listener()
-    ipcRenderer.on('monitor-tasks:changed', handler)
-    return () => ipcRenderer.removeListener('monitor-tasks:changed', handler)
+    ipcRenderer.on(IPC_CHANNELS.monitorTask.changed, handler)
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.monitorTask.changed, handler)
   },
 }
 
 contextBridge.exposeInMainWorld('qianchuan', {
   auth: authBridge,
   promotionMonitor: promotionMonitorBridge,
-  // 旧版页面暂时保留兼容别名，待稳定版本后统一移除。
-  oauth: { ...authBridge, getStatus: authBridge.getLoginStatus },
-  plans: { list: promotionMonitorBridge.listPlans },
 })

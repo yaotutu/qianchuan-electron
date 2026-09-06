@@ -10,5 +10,6 @@
     "sourceMap": true,
     "types": ["node", "electron"]
   },
-  "include": ["src/main.ts", "src/preload.ts", "src/main/**/*.ts"]
+  "include": ["src/main.ts", "src/preload.ts", "src/main/**/*.ts", "src/shared/contracts/**/*.ts"],
+  "exclude": ["src/**/__tests__/**", "src/**/*.test.ts", "src/**/*.test.tsx"]
 }

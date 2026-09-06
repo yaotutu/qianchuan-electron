@@ -8,9 +8,9 @@ import {
   monitorTaskRunResultSchema,
   type PromotionPlanFilters,
   type MonitorTaskFilters,
-  type MonitorTaskInput,
+  type MonitorTaskCreateInput,
   type MonitorTaskUpdateInput,
-} from '../model/qianchuan'
+} from '../../../shared/contracts'
 
 /** 获取 preload 暴露的安全桥；Renderer 永远不直接访问 Node.js 或巨量接口。 */
 const getBridge = () => {
@@ -62,7 +62,7 @@ export const qianchuanApi = {
     runBridgeRequest('读取本地监控任务', async () =>
       monitorTaskListResultSchema.parse(await getBridge().promotionMonitor.listTasks(filters)),
     ),
-  createMonitorTasks: (input: MonitorTaskInput) =>
+  createMonitorTasks: (input: MonitorTaskCreateInput) =>
     runBridgeRequest('创建监控任务', async () =>
       monitorTaskMutationResultSchema.parse(await getBridge().promotionMonitor.createTask(input)),
     ),

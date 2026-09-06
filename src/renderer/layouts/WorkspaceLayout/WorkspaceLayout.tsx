@@ -10,7 +10,7 @@ import {
   IconUser,
 } from '@arco-design/web-react/icon'
 import { useLocation, useNavigate } from 'react-router-dom'
-import type { AuthorizationResult, AdvertiserAccount } from '../../shared/model/qianchuan'
+import type { AuthorizationResult, AdvertiserAccount } from '../../../shared/contracts'
 import { useWorkspaceStore } from '../../app/store'
 import { WorkspaceRoutes } from '../../app/router'
 import { showInfoFeedback } from '../../shared/ui/feedback'

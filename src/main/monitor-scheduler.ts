@@ -1,4 +1,9 @@
-import type { MonitorRule, MonitorTask, MonitorTaskCheckResult, MonitorTaskStatus } from './monitor-task-store'
+import type {
+  MonitorRule,
+  MonitorTask,
+  MonitorTaskCheckResult,
+  MonitorTaskStatus,
+} from '../shared/contracts/monitor-task'
 
 /** 调度器只依赖平台计划的最小字段，避免把平台原始响应带入本地业务。 */
 export type MonitorPlanSnapshot = {
@@ -176,3 +181,5 @@ export const createMonitorScheduler = (dependencies: SchedulerDependencies) => {
     },
   }
 }
+
+export type MonitorScheduler = ReturnType<typeof createMonitorScheduler>

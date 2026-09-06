@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useWorkspaceStore } from '../../../app/store'
 import { qianchuanApi } from '../../../shared/api/qianchuan-api'
-import type { MonitorTaskFilters } from '../../../shared/model/qianchuan'
+import type { MonitorTaskFilters } from '../../../../shared/contracts'
 import { PROMOTION_MONITOR_PAGE_SIZE } from '../model'
 
 type UseMonitorTasksOptions = {

@@ -2,6 +2,7 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
+import { createJsonMonitorTaskRepository } from '../infrastructure/json-monitor-task-repository'
 import {
   MonitorTaskValidationError,
   createMonitorTaskStore,
@@ -112,7 +113,7 @@ describe('监控任务本地仓库', () => {
       now: () => fixedNow,
       createId: () => `task-${++sequence}`,
     }
-    const store = createMonitorTaskStore(filePath, dependencies)
+    const store = createMonitorTaskStore(createJsonMonitorTaskRepository(filePath), dependencies)
     const created = await store.create({
       ...validInput,
       plans: [...validInput.plans, { id: 'plan-2', name: '第二条计划' }],
@@ -122,7 +123,11 @@ describe('监控任务本地仓库', () => {
       'PAUSED',
     )
 
-    const restored = await createMonitorTaskStore(filePath).list({ status: 'PAUSED', page: 1, page_size: 20 })
+    const restored = await createMonitorTaskStore(createJsonMonitorTaskRepository(filePath)).list({
+      status: 'PAUSED',
+      page: 1,
+      page_size: 20,
+    })
     expect(restored.page.total).toBe(2)
     expect(restored.tasks.every((task) => task.status === 'PAUSED')).toBe(true)
 

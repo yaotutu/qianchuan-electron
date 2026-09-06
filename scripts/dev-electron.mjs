@@ -10,6 +10,9 @@ const projectDirectory = path.resolve(path.dirname(fileURLToPath(import.meta.url
 const sourceDirectory = path.join(projectDirectory, 'src')
 const electronBinary = require('electron')
 const typeScriptBinary = require.resolve('typescript/bin/tsc')
+// Vite 8 的 package exports 不导出 bin/vite.js；先解析公开的 package.json，再拼接实际 CLI 路径，兼容 npm 安装和本地 node_modules。
+const vitePackageDirectory = path.dirname(require.resolve('vite/package.json'))
+const viteBinary = path.join(vitePackageDirectory, 'bin/vite.js')
 const rendererUrl = process.env.QIANCHUAN_RENDERER_URL || 'http://127.0.0.1:5173'
 
 let electronProcess = null
@@ -67,12 +70,17 @@ const restartElectron = async () => {
 /** 只监听 Electron 边界代码；修改 React Renderer 时仍由 Vite HMR 处理，不做整窗重启。 */
 const isElectronSource = (filename) => {
   const normalized = String(filename || '').replaceAll('\\', '/')
-  return normalized === 'main.ts' || normalized === 'preload.ts' || normalized.startsWith('main/')
+  return (
+    normalized === 'main.ts' ||
+    normalized === 'preload.ts' ||
+    normalized.startsWith('main/') ||
+    normalized.startsWith('shared/contracts/')
+  )
 }
 
-const runTypeScriptBuild = () =>
+const runBuildProcess = (binary, args) =>
   new Promise((resolve) => {
-    compilationProcess = spawn(process.execPath, [typeScriptBinary, '-p', 'tsconfig.electron.json'], {
+    compilationProcess = spawn(process.execPath, [binary, ...args], {
       cwd: projectDirectory,
       stdio: 'inherit',
     })
@@ -81,6 +89,9 @@ const runTypeScriptBuild = () =>
       resolve(code ?? 1)
     })
   })
+
+const runTypeScriptBuild = () => runBuildProcess(typeScriptBinary, ['-p', 'tsconfig.electron.json'])
+const runPreloadBuild = () => runBuildProcess(viteBinary, ['build', '--config', 'vite.preload.config.mts'])
 
 /** 编译期间如果又有保存动作，只额外补做最后一次编译，避免并发写 dist-electron。 */
 const compileAndRestart = async () => {
@@ -92,9 +103,10 @@ const compileAndRestart = async () => {
 
   compilationInProgress = true
   compilationQueued = false
-  const exitCode = await runTypeScriptBuild()
-  if (exitCode === 0) await restartElectron()
-  else console.error('[dev:electron] 主进程编译失败，已保留当前 Electron 实例。')
+  const typeScriptExitCode = await runTypeScriptBuild()
+  const preloadExitCode = typeScriptExitCode === 0 ? await runPreloadBuild() : 1
+  if (preloadExitCode === 0) await restartElectron()
+  else console.error('[dev:electron] 主进程或 preload 构建失败，已保留当前 Electron 实例。')
   compilationInProgress = false
 
   if (compilationQueued) void compileAndRestart()

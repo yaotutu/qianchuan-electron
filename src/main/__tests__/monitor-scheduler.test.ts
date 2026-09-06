@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { createMonitorTasks, type MonitorTask } from '../monitor-task-store'
+import type { MonitorTask } from '../../shared/contracts/monitor-task'
+import { createMonitorTasks } from '../monitor-task-store'
 import { createMonitorScheduler, evaluateMonitorRule, type MonitorPlanSnapshot } from '../monitor-scheduler'
 
 const createdAt = new Date('2026-09-05T02:30:00.000Z')

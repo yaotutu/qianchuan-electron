@@ -1,6 +1,6 @@
 import { Button, Input, Typography } from '@arco-design/web-react'
 import { IconSearch } from '@arco-design/web-react/icon'
-import type { AdvertiserAccount } from '../../../shared/model/qianchuan'
+import type { AdvertiserAccount } from '../../../../shared/contracts'
 
 const { Text } = Typography
 

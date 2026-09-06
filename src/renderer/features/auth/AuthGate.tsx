@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Alert, Spin } from '@arco-design/web-react'
 import { useQuery } from '@tanstack/react-query'
 import { qianchuanApi } from '../../shared/api/qianchuan-api'
-import type { AuthorizationResult } from '../../shared/model/qianchuan'
+import type { AuthorizationResult } from '../../../shared/contracts'
 import { LoginPage } from './LoginPage'
 import { WorkspaceLayout } from '../../layouts/WorkspaceLayout/WorkspaceLayout'
 
@@ -81,11 +81,24 @@ export const AuthGate = () => {
   }
 
   if (healthQuery.isPending || currentQuery.isPending) {
-    return <div className="app-loading"><Spin size={32} /><span>正在连接登录服务…</span></div>
+    return (
+      <div className="app-loading">
+        <Spin size={32} />
+        <span>正在连接登录服务…</span>
+      </div>
+    )
   }
 
   if (healthQuery.isError) {
-    return <LoginPage busy={false} waiting={false} errorMessage="无法连接登录服务，请确认服务端已经启动。" onLogin={handleLogin} onRetry={() => void healthQuery.refetch()} />
+    return (
+      <LoginPage
+        busy={false}
+        waiting={false}
+        errorMessage="无法连接登录服务，请确认服务端已经启动。"
+        onLogin={handleLogin}
+        onRetry={() => void healthQuery.refetch()}
+      />
+    )
   }
 
   if (authorization?.status === 'success' && authorization.user && authorization.token) {
@@ -98,7 +111,12 @@ export const AuthGate = () => {
       authorization={authorization}
       busy={loginStartedAt !== null && statusQuery.isFetching}
       waiting={loginStartedAt !== null}
-      errorMessage={loginError || (currentQuery.data?.status === 'reauthorization_required' ? '长期授权已失效，请重新完成一次巨量授权。' : undefined)}
+      errorMessage={
+        loginError ||
+        (currentQuery.data?.status === 'reauthorization_required'
+          ? '长期授权已失效，请重新完成一次巨量授权。'
+          : undefined)
+      }
       onLogin={handleLogin}
       onRetry={() => void healthQuery.refetch()}
     />

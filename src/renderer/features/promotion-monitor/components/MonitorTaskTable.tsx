@@ -1,6 +1,6 @@
 import { Button, Checkbox, Empty, Pagination, Popconfirm, Space, Table, Tag, Typography } from '@arco-design/web-react'
 import type { ColumnProps } from '@arco-design/web-react/es/Table'
-import type { AdvertiserAccount, MonitorTask } from '../../../shared/model/qianchuan'
+import type { AdvertiserAccount, MonitorTask } from '../../../../shared/contracts'
 import { formatDateTime } from '../../../shared/utils/format'
 import { PROMOTION_MONITOR_PAGE_SIZE, getAccountName } from '../model'
 

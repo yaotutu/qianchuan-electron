@@ -1,6 +1,6 @@
 import { Button, Input, Select } from '@arco-design/web-react'
 import { IconRefresh, IconSearch } from '@arco-design/web-react/icon'
-import type { AdvertiserAccount, MonitorTaskFilters } from '../../../shared/model/qianchuan'
+import type { AdvertiserAccount, MonitorTaskFilters } from '../../../../shared/contracts'
 import { getAccountName } from '../model'
 
 type MonitorFiltersProps = {

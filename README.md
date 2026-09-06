@@ -1,6 +1,8 @@
 # 电小奇 · 千川 Electron 客户端
 
-当前客户端负责桌面登录交互和千川超级商品卡工作台展示，不直接访问巨量接口。敏感 OAuth 操作由配套的 `qianchuan-oauth-callback` 服务端完成。
+当前客户端负责桌面登录交互、千川超级商品卡工作台和本地推广监控。客户端不直接访问巨量接口；敏感 OAuth 操作由独立维护、独立部署的 `qianchuan-oauth-callback` 服务端完成。
+
+两个项目目前位于同一工作区，后续会拆成两个独立仓库维护。Electron 项目只依赖 OAuth 服务端约定的 HTTP 接口，不建立 monorepo，也不共享运行时包。
 
 ## 当前技术栈
 
@@ -13,11 +15,9 @@ Zod                  IPC 返回数据的运行时校验
 React Router         Electron 本地页面路由
 ```
 
-本次迁移采用“先迁移 Renderer、保留主进程协议”的方式，现有服务端和 OAuth 接口不需要同步大改。旧版 `src/index.html`、`src/renderer.js`、`src/styles.css` 暂时保留，便于排查和回退；应用启动时使用新的 React 构建产物。
-
 ## 启动
 
-先启动服务端并确认它已经是当前版本：
+先启动独立 OAuth 服务端并确认它已经是当前版本：
 
 ```bash
 cd /Users/yaotutu/Desktop/code/dianxiaoqi-qianchuan/qianchuan-oauth-callback
@@ -44,18 +44,45 @@ QIANCHUAN_OAUTH_SERVER_URL=https://你的服务端域名 npm start
 npm run dev             # Vite 热更新 + Electron 开发窗口
 npm run typecheck       # TypeScript 类型检查
 npm run build:renderer  # 构建 React Renderer
-npm run build:electron  # 构建 Electron 主进程和 preload
+npm run build:electron  # 清理并构建主进程，再把 sandbox preload 打成单文件
 npm test                # 运行单元测试
+npm run format:check    # 检查源码格式
 ```
 
 开发模式下 Renderer 通过 Vite Dev Server 加载；生产模式仍使用 `dist/index.html`，因此两种模式的 OAuth 和 IPC 协议保持一致。
 
+## 架构边界
+
+```text
+React Renderer
+    │ 仅通过 window.qianchuan 调用安全桥
+    ▼
+preload.ts
+    │ 仅暴露按业务分组的最小 IPC API
+    ▼
+Electron Main
+    ├── application/       登录、计划读取、监控任务编排
+    ├── infrastructure/    OAuth HTTP 客户端、系统通知、JSON Repository
+    ├── ipc/               IPC channel 注册和安全错误转换
+    ├── windows/           BrowserWindow 与外链策略
+    ├── monitor-task-store 监控任务业务规则与并发写编排
+    └── monitor-scheduler   本地监控调度
+    │
+    ▼
+qianchuan-oauth-callback（独立项目）
+    ├── OAuth 回调与授权尝试
+    ├── Access Token 安全存储与刷新
+    └── 千川只读计划代理
+```
+
+应用业务状态、监控规则、分组、启停、调度、执行日志和本地持久化全部留在 Electron 主进程。Renderer 只负责界面、路由和查询缓存；服务端不承载客户端任务 CRUD 或调度逻辑。
+
 ## 登录流程
 
 1. React 通过 TanStack Query 调用 preload 暴露的健康检查和当前授权接口；
-2. 用户点击登录后，Electron 主进程请求 `/oauth/oceanengine/start?format=json`；
+2. Electron 主进程请求 `/oauth/oceanengine/start?format=json`；
 3. 主进程保存服务端返回的 `attemptId`，并使用系统浏览器打开授权 URL；
-4. 巨量回调到服务端后，服务端换 Token 并获取用户信息；
+4. 巨量回调到独立服务端后，服务端换 Token 并获取用户信息；
 5. React 通过 Query 定时轮询 `/oauth/result?attempt_id=...`；
 6. 登录成功后，工作台使用服务端返回的广告主账号列表和商品投放计划。
 
@@ -67,7 +94,7 @@ Electron Renderer 不接触 App Secret、Access Token、Refresh Token、`auth_co
 
 - 账号搜索、当前账号切换和全选；
 - 关键词、投放状态、计划类型和创建时间筛选；
-- 推广监控管理和推广监控创建页面占位；
+- 推广监控管理和推广监控创建页面；
 - 计划分页、刷新、全选和状态展示；
 - 计划只读详情抽屉，集中查看计划、商品、账号和指标信息；
 - 消耗、支付 ROI、创建时间等读取字段展示；
@@ -77,24 +104,31 @@ Electron Renderer 不接触 App Secret、Access Token、Refresh Token、`auth_co
 
 ```text
 src/
-├── main.ts                         # Electron 主进程、OAuth 请求和 IPC
+├── main.ts                         # Electron 组合根与生命周期
 ├── preload.ts                      # 安全桥，按 auth / promotionMonitor 分组暴露能力
-├── index.html                      # 旧版页面入口，暂作回退参考
-├── renderer.js                     # 旧版 Renderer，暂作回退参考
-├── styles.css                      # 旧版样式，暂作回退参考
-└── renderer/                       # React Renderer 新入口
+├── shared/contracts/               # Electron 内部跨进程契约，不与 OAuth 项目共享
+│   ├── auth.ts                     # 授权和健康状态 Schema / 类型
+│   ├── promotion-plan.ts           # 商品投放计划 Schema / 类型
+│   ├── monitor-task.ts             # 本地监控任务 Schema / 类型
+│   ├── ipc.ts                      # IPC channel 常量
+│   └── bridge.ts                   # window.qianchuan 类型
+├── main/
+│   ├── application/                # 用例编排：授权、计划读取、监控任务
+│   │   └── ports/                  # 持久化等基础设施端口
+│   ├── infrastructure/             # OAuth HTTP、系统通知和 JSON Repository 适配器
+│   ├── ipc/                        # IPC 注册及安全错误转换
+│   ├── windows/                    # BrowserWindow 创建与外链策略
+│   ├── monitor-task-store.ts       # 任务规则、筛选和串行化读改写
+│   ├── monitor-scheduler.ts        # 本地监控调度器
+│   └── __tests__/                  # 主进程纯函数和仓库测试
+└── renderer/                       # React Renderer
     ├── main.tsx                    # React 根节点
     ├── App.tsx                     # 主题和认证边界
     ├── app/                        # Provider、QueryClient、Zustand Store、错误边界和路由
     ├── layouts/WorkspaceLayout/    # 顶栏、产品导航、账号栏和内容容器
-    │   └── components/             # 账号选择器等布局级组件
     ├── features/auth/              # OAuth 状态恢复、登录轮询和登录页
     ├── features/promotion-monitor/ # 推广监控列表、筛选、分页和数据 Hook
-    │   ├── components/             # 头部、筛选、工具栏、表格、详情抽屉和创建占位
-    │   └── hooks/                  # 推广计划查询与分页状态
     ├── shared/api/                 # preload API 适配和 Zod 校验
-    ├── shared/model/               # 业务类型、数据 Schema
     ├── shared/utils/               # 金额、日期和指标格式化
-    ├── shared/ui/                  # 统一提示反馈封装
     └── styles/                     # 设计 Token 和全局布局样式
 ```

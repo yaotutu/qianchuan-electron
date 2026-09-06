@@ -1,6 +1,6 @@
 import { Form, Input, InputNumber, Modal, Select } from '@arco-design/web-react'
 import { useEffect, useState } from 'react'
-import type { MonitorRule, MonitorTask, MonitorTaskUpdateInput } from '../../../shared/model/qianchuan'
+import type { MonitorRule, MonitorTask, MonitorTaskUpdateInput } from '../../../../shared/contracts'
 
 const METRIC_OPTIONS = [
   { value: 'ROI', label: '支付 ROI' },

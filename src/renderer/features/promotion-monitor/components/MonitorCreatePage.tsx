@@ -17,7 +17,7 @@ import {
 import type { ColumnProps } from '@arco-design/web-react/es/Table'
 import { queryClient } from '../../../app/query-client'
 import { qianchuanApi } from '../../../shared/api/qianchuan-api'
-import type { AdvertiserAccount, MonitorRule, PromotionPlan } from '../../../shared/model/qianchuan'
+import type { AdvertiserAccount, MonitorRule, PromotionPlan } from '../../../../shared/contracts'
 import { showErrorFeedback, showSuccessFeedback } from '../../../shared/ui/feedback'
 import { getAccountName } from '../model'
 

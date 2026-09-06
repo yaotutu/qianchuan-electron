@@ -1,5 +1,5 @@
 import { Navigate, Route, Routes, useNavigate } from 'react-router-dom'
-import type { AdvertiserAccount } from '../shared/model/qianchuan'
+import type { AdvertiserAccount } from '../../shared/contracts'
 import { FeaturePlaceholder } from '../features/placeholder/FeaturePlaceholder'
 import { PromotionMonitorPage } from '../features/promotion-monitor/PromotionMonitorPage'
 

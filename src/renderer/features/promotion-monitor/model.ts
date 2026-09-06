@@ -1,4 +1,4 @@
-import type { AdvertiserAccount } from '../../shared/model/qianchuan'
+import type { AdvertiserAccount } from '../../../shared/contracts'
 
 /** 推广监控页面当前使用的分页大小，后续接入服务端分页策略时集中修改。 */
 export const PROMOTION_MONITOR_PAGE_SIZE = 20

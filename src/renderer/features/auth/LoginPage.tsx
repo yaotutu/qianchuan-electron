@@ -1,6 +1,6 @@
 import { Alert, Button, Card, Descriptions, Spin, Tag, Typography } from '@arco-design/web-react'
 import { IconCheck, IconLock, IconSafe, IconThunderbolt } from '@arco-design/web-react/icon'
-import type { AuthorizationResult } from '../../shared/model/qianchuan'
+import type { AuthorizationResult } from '../../../shared/contracts'
 import { formatDateTime } from '../../shared/utils/format'
 
 const { Title, Text, Paragraph } = Typography
@@ -34,8 +34,14 @@ export const LoginPage = ({
     <main className="login-stage">
       <Card className="login-card" bordered={false}>
         <section className="intro-panel">
-          <Tag color="arcoblue" bordered={false}>OCEAN ENGINE CONNECT</Tag>
-          <Title heading={1}>连接你的<br />巨量千川账户</Title>
+          <Tag color="arcoblue" bordered={false}>
+            OCEAN ENGINE CONNECT
+          </Tag>
+          <Title heading={1}>
+            连接你的
+            <br />
+            巨量千川账户
+          </Title>
           <Paragraph>使用巨量开放平台完成安全授权，统一查看店铺的商品投放计划和经营数据。</Paragraph>
           <ul className="feature-list">
             {[
@@ -43,7 +49,13 @@ export const LoginPage = ({
               ['安全保管', '密钥和 Token 仅由服务端保管'],
               ['自动同步', '登录后自动同步商品投放计划'],
             ].map(([title, description]) => (
-              <li key={title}><IconCheck /><span><b>{title}</b>{description}</span></li>
+              <li key={title}>
+                <IconCheck />
+                <span>
+                  <b>{title}</b>
+                  {description}
+                </span>
+              </li>
             ))}
           </ul>
         </section>
@@ -90,9 +102,11 @@ export const LoginPage = ({
                 {isUnavailable ? '暂时无法连接登录服务' : waiting ? '请在浏览器中完成授权' : '准备开始'}
               </Title>
               <Paragraph>
-                {errorMessage || healthMessage || (waiting
-                  ? '授权成功后可以关闭浏览器，本页面会自动更新。'
-                  : '点击登录后，将在系统浏览器中打开巨量官方授权页面。')}
+                {errorMessage ||
+                  healthMessage ||
+                  (waiting
+                    ? '授权成功后可以关闭浏览器，本页面会自动更新。'
+                    : '点击登录后，将在系统浏览器中打开巨量官方授权页面。')}
               </Paragraph>
               {authorization?.message && <Text type="secondary">{authorization.message}</Text>}
             </div>
@@ -108,11 +122,17 @@ export const LoginPage = ({
           >
             {isUnavailable ? '重新检测' : hasUser ? '重新授权' : waiting ? '重新打开授权' : '使用巨量千川登录'}
           </Button>
-          <div className="privacy-note"><IconLock /> 授权完成后，应用会自动更新登录状态</div>
-          {isUnavailable && <Alert className="login-alert" type="warning" content={errorMessage || '请确认登录服务已经启动。'} />}
+          <div className="privacy-note">
+            <IconLock /> 授权完成后，应用会自动更新登录状态
+          </div>
+          {isUnavailable && (
+            <Alert className="login-alert" type="warning" content={errorMessage || '请确认登录服务已经启动。'} />
+          )}
         </section>
       </Card>
-      <Text className="login-footer" type="secondary">电小奇 · 让千川投放管理更简单</Text>
+      <Text className="login-footer" type="secondary">
+        电小奇 · 让千川投放管理更简单
+      </Text>
     </main>
   )
 }

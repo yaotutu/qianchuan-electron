@@ -1,93 +1,18 @@
 import { randomUUID } from 'node:crypto'
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
-import path from 'node:path'
+import type { MonitorTaskRepository } from './application/ports/monitor-task-repository'
 
-export type MonitorMetric = 'ROI' | 'COST' | 'BUDGET'
-export type MonitorOperator = 'GT' | 'GTE' | 'LT' | 'LTE'
-export type MonitorTaskStatus = 'RUNNING' | 'PAUSED'
-export type MonitorAction = 'NOTICE'
-
-export type MonitorRule = {
-  metric: MonitorMetric
-  operator: MonitorOperator
-  threshold: number
-}
-
-export type MonitorTask = {
-  id: string
-  advertiserId: string
-  promotionPlanId: string
-  promotionPlanName: string
-  productName: string
-  productImage: string
-  platformStatus: string
-  groupName: string
-  status: MonitorTaskStatus
-  rule: MonitorRule
-  action: MonitorAction
-  intervalMinutes: number
-  createdAt: string
-  updatedAt: string
-  lastCheckedAt: string | null
-  lastResult: {
-    status: string
-    message: string
-  }
-}
-
-export type MonitorTaskCreateInput = {
-  advertiserId?: string
-  plans?: Array<{
-    id?: string
-    name?: string
-    productName?: string
-    productImage?: string
-    status?: string
-  }>
-  groupName?: string
-  status?: MonitorTaskStatus
-  rule?: MonitorRule
-  action?: MonitorAction
-  intervalMinutes?: number
-}
-
-export type MonitorTaskCheckResult = {
-  status: 'TRIGGERED' | 'NORMAL' | 'DATA_MISSING' | 'ERROR'
-  message: string
-}
-
-export type MonitorTaskUpdateInput = {
-  groupName?: string
-  status?: MonitorTaskStatus
-  rule?: MonitorRule
-  action?: MonitorAction
-  intervalMinutes?: number
-}
-
-export type MonitorTaskFilters = {
-  advertiser_id?: string
-  keyword?: string
-  status?: 'ALL' | MonitorTaskStatus
-  metric?: 'ALL' | MonitorMetric
-  action?: 'ALL' | MonitorAction
-  page?: number
-  page_size?: number
-}
-
-export type MonitorTaskListResult = {
-  tasks: MonitorTask[]
-  page: {
-    current: number
-    pageSize: number
-    total: number
-    totalPages: number
-  }
-}
-
-type MonitorTaskFile = {
-  version: 1
-  tasks: MonitorTask[]
-}
+import type {
+  MonitorMetric,
+  MonitorOperator,
+  MonitorRule,
+  MonitorTask,
+  MonitorTaskCheckResult,
+  MonitorTaskCreateInput,
+  MonitorTaskStoreFilters,
+  MonitorTaskListResult,
+  MonitorTaskStatus,
+  MonitorTaskUpdateInput,
+} from '../shared/contracts/monitor-task'
 
 type StoreDependencies = {
   now?: () => Date
@@ -195,7 +120,10 @@ const toPositiveInteger = (value: unknown, fallback: number, maximum = Number.MA
 }
 
 /** 筛选与分页保持为纯函数，后续迁移 SQLite 时页面协议不需要变化。 */
-export const filterMonitorTasks = (tasks: MonitorTask[], filters: MonitorTaskFilters = {}): MonitorTaskListResult => {
+export const filterMonitorTasks = (
+  tasks: MonitorTask[],
+  filters: MonitorTaskStoreFilters = {},
+): MonitorTaskListResult => {
   const keyword = asTrimmedText(filters.keyword).toLocaleLowerCase('zh-CN')
   const advertiserId = asTrimmedText(filters.advertiser_id)
   const status = filters.status ?? 'ALL'
@@ -228,64 +156,23 @@ export const filterMonitorTasks = (tasks: MonitorTask[], filters: MonitorTaskFil
   }
 }
 
-const isMonitorTask = (value: unknown): value is MonitorTask => {
-  if (!value || typeof value !== 'object') return false
-  const task = value as Partial<MonitorTask>
-  return (
-    typeof task.id === 'string' &&
-    typeof task.advertiserId === 'string' &&
-    typeof task.promotionPlanId === 'string' &&
-    typeof task.promotionPlanName === 'string' &&
-    STATUSES.has(task.status as MonitorTaskStatus) &&
-    task.action === 'NOTICE' &&
-    Boolean(task.rule) &&
-    METRICS.has(task.rule?.metric as MonitorMetric) &&
-    OPERATORS.has(task.rule?.operator as MonitorOperator) &&
-    typeof task.rule?.threshold === 'number' &&
-    typeof task.intervalMinutes === 'number'
-  )
-}
-
-const parseFile = (content: string): MonitorTaskFile => {
-  const parsed = JSON.parse(content) as Partial<MonitorTaskFile>
-  if (parsed.version !== 1 || !Array.isArray(parsed.tasks) || !parsed.tasks.every(isMonitorTask)) {
-    throw new Error('本地监控任务数据格式无效。')
-  }
-  return { version: 1, tasks: parsed.tasks }
-}
-
 /**
- * JSON 仓库仅保存本产品的监控任务，不保存 Access Token、Secret 或 Cookie。
- * 所有写入先落临时文件再 rename，避免应用中断留下半份 JSON。
+ * 监控任务 Store 承担本地业务规则和读改写串行化。
+ * 它只依赖持久化端口，因此未来切换 SQLite 时无需改动 IPC、应用服务或调度器。
  */
-export const createMonitorTaskStore = (filePath: string, dependencies: StoreDependencies = {}) => {
+export const createMonitorTaskStore = (repository: MonitorTaskRepository, dependencies: StoreDependencies = {}) => {
   const now = dependencies.now ?? (() => new Date())
   const createId = dependencies.createId ?? randomUUID
   let mutationQueue: Promise<unknown> = Promise.resolve()
 
-  const readAll = async (): Promise<MonitorTask[]> => {
-    try {
-      const content = await readFile(filePath, 'utf8')
-      return parseFile(content).tasks
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return []
-      throw error
-    }
-  }
-
-  const writeAll = async (tasks: MonitorTask[]) => {
-    await mkdir(path.dirname(filePath), { recursive: true })
-    const temporaryPath = `${filePath}.${process.pid}.${Date.now()}.tmp`
-    await writeFile(temporaryPath, `${JSON.stringify({ version: 1, tasks }, null, 2)}\n`, 'utf8')
-    await rename(temporaryPath, filePath)
-  }
+  const readAll = () => repository.readAll()
 
   /** 串行化所有读改写操作，避免两个 IPC 同时提交时互相覆盖。 */
   const mutate = <T>(operation: (tasks: MonitorTask[]) => Promise<{ tasks: MonitorTask[]; result: T }>) => {
     const pending = mutationQueue.then(async () => {
       const current = await readAll()
       const next = await operation(current)
-      await writeAll(next.tasks)
+      await repository.replaceAll(next.tasks)
       return next.result
     })
     mutationQueue = pending.catch(() => undefined)
@@ -293,7 +180,7 @@ export const createMonitorTaskStore = (filePath: string, dependencies: StoreDepe
   }
 
   return {
-    list: async (filters: MonitorTaskFilters) => filterMonitorTasks(await readAll(), filters),
+    list: async (filters: MonitorTaskStoreFilters) => filterMonitorTasks(await readAll(), filters),
     create: (input: MonitorTaskCreateInput) =>
       mutate(async (tasks) => {
         const created = createMonitorTasks(input, now(), createId)
@@ -346,3 +233,5 @@ export const createMonitorTaskStore = (filePath: string, dependencies: StoreDepe
       }),
   }
 }
+
+export type MonitorTaskStore = ReturnType<typeof createMonitorTaskStore>
