@@ -9,17 +9,21 @@ type AuthServiceDependencies = {
 const REQUIRED_SERVER_CAPABILITIES = [
   'oauth-attempt-result',
   'current-authorization',
-  'product-plan-list',
-  'product-plan-detail',
 ]
 
 /**
  * 登录尝试状态只存在于 Electron 主进程内存中。
- * 服务端负责安全保存和刷新凭据，Renderer 只能读取经过裁剪的授权状态。
+ * 服务端负责安全保存和刷新凭据，Electron 主进程拿到 Access Token 后直接调用巨量平台 API。
+ * Renderer 不接触 Access Token、Refresh Token 或 App Secret。
  */
 export const createAuthService = ({ client, openExternal, now = () => new Date() }: AuthServiceDependencies) => {
   let activeAttemptId: string | null = null
   let activeLoginStartedAt: string | null = null
+
+  // 主进程缓存的 Access Token 和授权广告主列表
+  // Access Token 是用户级别的短期凭证（约 1 小时过期），缓存在主进程内存中
+  let cachedAccessToken: string | null = null
+  let cachedAdvertiserIds: string[] = []
 
   const clearActiveAttempt = () => {
     activeAttemptId = null
@@ -61,7 +65,18 @@ export const createAuthService = ({ client, openExternal, now = () => new Date()
 
   const getCurrentAuthorization = async () => {
     try {
-      return await client.request('/oauth/current')
+      const result = await client.request('/oauth/current')
+
+      // 缓存 Access Token 和广告主列表，供 promotion-plan-service 直接调巨量 API
+      const token = result.token as { accessToken?: string; advertiserIds?: string[] } | undefined
+      if (token?.accessToken) {
+        cachedAccessToken = token.accessToken
+        cachedAdvertiserIds = Array.isArray(token.advertiserIds)
+          ? token.advertiserIds.map(String)
+          : []
+      }
+
+      return result
     } catch (error) {
       const details = getRequestErrorDetails(error)
       if (details.status === 404) return { ok: true, status: 'idle', message: '当前还没有完成授权。' }
@@ -87,14 +102,22 @@ export const createAuthService = ({ client, openExternal, now = () => new Date()
       return { ok: false, status: 'server_outdated', message: '登录服务仍在运行旧版本，请重启登录服务后再试。' }
     }
     if (health.configured !== true) {
-      // 这里只记录缺失配置项名称，不记录配置值，更不能输出 Token 或 Secret。
       console.error('OAuth 服务端配置未完成：', health.missingConfig || [])
       return { ok: false, status: 'server_unavailable', message: '登录服务暂未准备好，请稍后重试。' }
     }
     return { ok: true, status: 'ready', version: health.version }
   }
 
-  return { startLogin, getLoginStatus, getCurrentAuthorization, getHealth }
+  return {
+    startLogin,
+    getLoginStatus,
+    getCurrentAuthorization,
+    getHealth,
+    /** 返回主进程缓存的 Access Token，供千川 API 客户端直接使用。 */
+    getAccessToken: () => cachedAccessToken,
+    /** 返回当前授权的广告主 ID 列表，用于越权检查。 */
+    getAdvertiserIds: () => cachedAdvertiserIds,
+  }
 }
 
 export type AuthService = ReturnType<typeof createAuthService>

@@ -99,7 +99,7 @@ const groupByAdvertiser = (tasks: MonitorTask[]) =>
 const safeErrorMessage = (error: unknown) => (error instanceof Error ? error.message : '平台数据读取失败。')
 
 /**
- * Electron 本地调度器：只读取服务端代理返回的计划数据，并把检查结果写回本地任务仓库。
+ * Electron 本地调度器：只读取巨量平台 API 返回的计划数据，并把检查结果写回本地任务仓库。
  * 它不会调用千川写接口，也不会把 Token、Cookie 或 Secret 放到 Renderer。
  */
 export const createMonitorScheduler = (dependencies: SchedulerDependencies) => {

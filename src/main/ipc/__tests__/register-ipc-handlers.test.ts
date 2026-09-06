@@ -26,6 +26,8 @@ describe('IPC 输入边界', () => {
         getLoginStatus: vi.fn(),
         getCurrentAuthorization: vi.fn(),
         getHealth: vi.fn(),
+        getAccessToken: vi.fn(),
+        getAdvertiserIds: vi.fn(),
       },
       promotionPlanService: { list: vi.fn(), getDetail: vi.fn(), getAllForMonitor: vi.fn() },
       monitorTaskService: {
@@ -55,6 +57,8 @@ describe('IPC 输入边界', () => {
         getLoginStatus: vi.fn(),
         getCurrentAuthorization: vi.fn(),
         getHealth: vi.fn(),
+        getAccessToken: vi.fn(),
+        getAdvertiserIds: vi.fn(),
       },
       promotionPlanService: { list, getDetail: vi.fn(), getAllForMonitor: vi.fn() },
       monitorTaskService: {
@@ -81,6 +85,8 @@ it('校验计划详情输入后再调用应用服务', async () => {
       getLoginStatus: vi.fn(),
       getCurrentAuthorization: vi.fn(),
       getHealth: vi.fn(),
+      getAccessToken: vi.fn(),
+      getAdvertiserIds: vi.fn(),
     },
     promotionPlanService: { list: vi.fn(), getDetail, getAllForMonitor: vi.fn() },
     monitorTaskService: {

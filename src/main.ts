@@ -4,6 +4,7 @@ import path from 'node:path'
 import { createAuthService } from './main/application/auth-service'
 import { createMonitorTaskService } from './main/application/monitor-task-service'
 import { createPromotionPlanService } from './main/application/promotion-plan-service'
+import { createQianchuanApiClient } from './main/infrastructure/qianchuan-api-client'
 import { notifyMonitorTask } from './main/infrastructure/electron-monitor-notifier'
 import { createJsonMonitorTaskRepository } from './main/infrastructure/json-monitor-task-repository'
 import { createOAuthServerClient } from './main/infrastructure/oauth-server-client'
@@ -15,7 +16,7 @@ import { IPC_CHANNELS } from './shared/contracts/ipc'
 
 /**
  * OAuth 服务是独立部署的外部依赖，Electron 仅通过稳定 HTTP 契约访问它。
- * 地址只在主进程读取，不会传给 Renderer；未来拆分两个仓库时无需共享运行时代码。
+ * 地址只在主进程读取，不会传给 Renderer。
  */
 const oauthServerUrl = process.env.QIANCHUAN_OAUTH_SERVER_URL || 'http://127.0.0.1:3100'
 const rendererUrl = process.env.QIANCHUAN_RENDERER_URL
@@ -33,7 +34,16 @@ app.whenReady().then(() => {
     client: oauthServerClient,
     openExternal: (url) => shell.openExternal(url),
   })
-  const promotionPlanService = createPromotionPlanService(oauthServerClient)
+
+  // 千川 API 客户端：主进程直接调用巨量开放平台 API，不再经过服务端代理
+  const qianchuanApiClient = createQianchuanApiClient()
+
+  // auth-service 同时充当 TokenProvider，为千川 API 客户端提供 Access Token
+  const promotionPlanService = createPromotionPlanService({
+    apiClient: qianchuanApiClient,
+    tokenProvider: authService,
+  })
+
   const monitorTaskRepository = createJsonMonitorTaskRepository(
     path.join(app.getPath('userData'), 'monitor-tasks.json'),
   )

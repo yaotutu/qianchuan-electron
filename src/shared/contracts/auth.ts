@@ -1,8 +1,11 @@
 import { z } from 'zod'
 
 /**
- * 授权相关契约只描述 Electron 各进程都需要识别的安全字段。
- * 服务端即使增加返回字段也不会破坏客户端，同时不会在契约中暴露 Access Token 等敏感信息。
+ * 授权相关契约。
+ *
+ * 服务端 /oauth/current 现在直接返回 Access Token 和 Refresh Token，
+ * 供 Electron 主进程直接调用巨量平台 API。
+ * Token 只在主进程内存中，不传给 Renderer。
  */
 export const advertiserAccountSchema = z
   .object({
@@ -33,7 +36,11 @@ export const authorizationSchema = z
       .optional(),
     token: z
       .object({
+        // Access Token 直接返回，供主进程直接调用巨量平台 API
+        accessToken: z.string().optional(),
+        refreshToken: z.string().optional(),
         accessTokenExpiresAt: z.string().optional(),
+        refreshTokenExpiresAt: z.string().optional(),
         advertiserIds: z.array(z.union([z.string(), z.number()]).transform(String)).optional(),
         advertiserAccounts: z.array(advertiserAccountSchema).optional(),
       })
