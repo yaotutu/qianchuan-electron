@@ -45,12 +45,10 @@ export const PRODUCT_PLAN_STATUSES = Object.freeze([
 export const PRODUCT_PLAN_SCENES = Object.freeze(['UNI_PROJECT', 'OVERALL_PROJECT'])
 
 /** 千川商品投放计划列表接口地址（开放平台固定地址）。 */
-export const PRODUCT_PLAN_LIST_URL =
-  'https://api.oceanengine.com/open_api/v1.0/qianchuan/uni_promotion/list/'
+export const PRODUCT_PLAN_LIST_URL = 'https://api.oceanengine.com/open_api/v1.0/qianchuan/uni_promotion/list/'
 
 /** 千川商品投放计划详情接口地址。 */
-export const PRODUCT_PLAN_DETAIL_URL =
-  'https://api.oceanengine.com/open_api/v1.0/qianchuan/uni_promotion/ad/detail/'
+export const PRODUCT_PLAN_DETAIL_URL = 'https://api.oceanengine.com/open_api/v1.0/qianchuan/uni_promotion/ad/detail/'
 
 const PAGE_SIZES = Object.freeze([10, 20, 50, 100])
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -74,11 +72,7 @@ const parseDate = (value: string, fieldName: string): number => {
   const [year, month, day] = value.split('-').map(Number)
   const timestamp = Date.UTC(year, month - 1, day)
   const parsed = new Date(timestamp)
-  if (
-    parsed.getUTCFullYear() !== year ||
-    parsed.getUTCMonth() !== month - 1 ||
-    parsed.getUTCDate() !== day
-  ) {
+  if (parsed.getUTCFullYear() !== year || parsed.getUTCMonth() !== month - 1 || parsed.getUTCDate() !== day) {
     throw new Error(`${fieldName} 不是有效日期。`)
   }
   return timestamp
@@ -99,9 +93,7 @@ const toFiniteNumber = (value: unknown, fallback = 0): number => {
 }
 
 const normalizeAdvertiserIds = (values: unknown): string[] =>
-  (Array.isArray(values) ? values : [])
-    .map((value) => String(value ?? '').trim())
-    .filter(Boolean)
+  (Array.isArray(values) ? values : []).map((value) => String(value ?? '').trim()).filter(Boolean)
 
 // ─── 列表查询 ───────────────────────────────────────────────
 
@@ -143,10 +135,14 @@ export const parseProductPlanQuery = (
   const pageSize = toPositiveInteger(params.page_size ?? null, 20)
   if (!PAGE_SIZES.includes(pageSize)) throw new Error('page_size 只允许 10、20、50 或 100。')
 
-  const status = String(params.status ?? 'ALL').trim().toUpperCase()
+  const status = String(params.status ?? 'ALL')
+    .trim()
+    .toUpperCase()
   if (!PRODUCT_PLAN_STATUSES.includes(status)) throw new Error('投放状态参数不受支持。')
 
-  const scene = String(params.scene ?? 'UNI_PROJECT').trim().toUpperCase()
+  const scene = String(params.scene ?? 'UNI_PROJECT')
+    .trim()
+    .toUpperCase()
   if (!PRODUCT_PLAN_SCENES.includes(scene)) throw new Error('计划类型参数不受支持。')
 
   const keyword = String(params.keyword ?? '').trim()
@@ -209,9 +205,7 @@ const normalizeProduct = (product: Record<string, unknown> = {}) => ({
   id: String(product.product_id ?? ''),
   name: String(product.product_name ?? ''),
   image: String(product.product_image ?? ''),
-  recommendReasons: Array.isArray(product.recommend_reasons)
-    ? (product.recommend_reasons as string[]).map(String)
-    : [],
+  recommendReasons: Array.isArray(product.recommend_reasons) ? (product.recommend_reasons as string[]).map(String) : [],
 })
 
 const normalizePlan = (item: Record<string, unknown> = {}) => {
@@ -246,10 +240,7 @@ const normalizePlan = (item: Record<string, unknown> = {}) => {
 }
 
 /** 把平台响应裁剪为页面模型。 */
-export const normalizeProductPlanResponse = (
-  payload: Record<string, unknown>,
-  query: ProductPlanQuery,
-) => {
+export const normalizeProductPlanResponse = (payload: Record<string, unknown>, query: ProductPlanQuery) => {
   const data = (payload?.data ?? {}) as Record<string, unknown>
   const pageInfo = (data.page_info ?? {}) as Record<string, unknown>
   return {
@@ -263,9 +254,7 @@ export const normalizeProductPlanResponse = (
       scene: query.scene,
       keyword: query.keyword,
     },
-    plans: Array.isArray(data.ad_list)
-      ? (data.ad_list as Record<string, unknown>[]).map(normalizePlan)
-      : [],
+    plans: Array.isArray(data.ad_list) ? (data.ad_list as Record<string, unknown>[]).map(normalizePlan) : [],
     page: {
       current: toFiniteNumber(pageInfo.page, query.page),
       size: toFiniteNumber(pageInfo.page_size, query.pageSize),

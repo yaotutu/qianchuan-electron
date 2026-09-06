@@ -6,10 +6,7 @@ type AuthServiceDependencies = {
   now?: () => Date
 }
 
-const REQUIRED_SERVER_CAPABILITIES = [
-  'oauth-attempt-result',
-  'current-authorization',
-]
+const REQUIRED_SERVER_CAPABILITIES = ['oauth-attempt-result', 'current-authorization']
 
 /**
  * 登录尝试状态只存在于 Electron 主进程内存中。
@@ -71,9 +68,7 @@ export const createAuthService = ({ client, openExternal, now = () => new Date()
       const token = result.token as { accessToken?: string; advertiserIds?: string[] } | undefined
       if (token?.accessToken) {
         cachedAccessToken = token.accessToken
-        cachedAdvertiserIds = Array.isArray(token.advertiserIds)
-          ? token.advertiserIds.map(String)
-          : []
+        cachedAdvertiserIds = Array.isArray(token.advertiserIds) ? token.advertiserIds.map(String) : []
       }
 
       return result

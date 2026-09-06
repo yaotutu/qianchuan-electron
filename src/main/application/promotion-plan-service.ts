@@ -78,8 +78,7 @@ export const createProductPlanSearch = (filters: PromotionPlanQuery = {}) => {
   const params = new URLSearchParams()
   ALLOWED_FILTER_KEYS.forEach((key) => {
     const value = filters[key]
-    if (['string', 'number'].includes(typeof value) && String(value).trim())
-      params.set(key, String(value).trim())
+    if (['string', 'number'].includes(typeof value) && String(value).trim()) params.set(key, String(value).trim())
   })
   return params
 }
@@ -123,10 +122,7 @@ export const createPromotionPlanService = ({ apiClient, tokenProvider }: Promoti
   }
 
   /** 调度器按广告主批量读取计划，并在找到所有目标计划后提前停止翻页。 */
-  const getAllForMonitor = async (
-    advertiserId: string,
-    promotionPlanIds: string[],
-  ): Promise<MonitorPlanSnapshot[]> => {
+  const getAllForMonitor = async (advertiserId: string, promotionPlanIds: string[]): Promise<MonitorPlanSnapshot[]> => {
     const targetIds = new Set(promotionPlanIds)
     const foundPlans = new Map<string, MonitorPlanSnapshot>()
     const today = getChinaDate()

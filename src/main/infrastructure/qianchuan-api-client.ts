@@ -31,7 +31,10 @@ export class QianchuanApiError extends Error {
 
 /** 网络错误类型，请求未到达平台或响应不是合法 JSON。 */
 export class QianchuanNetworkError extends Error {
-  constructor(message: string, readonly cause?: unknown) {
+  constructor(
+    message: string,
+    readonly cause?: unknown,
+  ) {
     super(message)
     this.name = 'QianchuanNetworkError'
   }
@@ -117,3 +120,6 @@ export const createQianchuanApiClient = ({
   request: async (url: string, accessToken: string, operation: string): Promise<JsonRecord> =>
     requestJson(url, accessToken, timeoutMs, fetchImpl, operation),
 })
+
+/** 业务服务依赖的客户端类型；保持构造函数返回形状和公共类型解耦。 */
+export type QianchuanApiClient = ReturnType<typeof createQianchuanApiClient>
