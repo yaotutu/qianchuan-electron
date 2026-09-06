@@ -36,6 +36,8 @@ win:
         - x64
 
 linux:
+  # AppImage 内部可执行文件名必须仅使用安全的 ASCII 字符；产品展示名称仍保留中文。
+  executableName: qianchuan-electron
   category: Office
   target:
     - target: AppImage
