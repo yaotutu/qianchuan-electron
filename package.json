@@ -1,6 +1,6 @@
 {
   "name": "qianchuan-electron",
-  "version": "1.0.0",
+  "version": "1.0.0-dev.1",
   "description": "千川 Electron 桌面应用",
   "main": "dist-electron/main.js",
   "scripts": {
