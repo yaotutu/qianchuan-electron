@@ -10,10 +10,10 @@
     "build:renderer": "vite build --config vite.config.mts",
     "typecheck": "npm run typecheck:renderer && npm run typecheck:electron",
     "test": "vitest run --config vitest.config.mts",
-    "format:check": "prettier --check \"src/main.ts\" \"src/main/**/*.ts\" \"src/preload.ts\" \"src/renderer/App.tsx\" \"src/renderer/app/*.{ts,tsx}\" \"src/renderer/features/placeholder/**/*.tsx\" \"src/renderer/features/promotion-monitor/**/*.{ts,tsx}\" \"src/renderer/layouts/WorkspaceLayout/**/*.tsx\" \"src/renderer/shared/{api,model,ui}/*.{ts,tsx}\" vite.config.mts vitest.config.mts \"tsconfig*.json\" package.json",
+    "format:check": "prettier --check \"src/main.ts\" \"src/main/**/*.ts\" \"src/preload.ts\" \"src/renderer/App.tsx\" \"src/renderer/app/*.{ts,tsx}\" \"src/renderer/features/placeholder/**/*.tsx\" \"src/renderer/features/promotion-monitor/**/*.{ts,tsx}\" \"src/renderer/layouts/WorkspaceLayout/**/*.tsx\" \"src/renderer/shared/{api,model,ui}/*.{ts,tsx}\" vite.config.mts vitest.config.mts \"tsconfig*.json\" \"scripts/**/*.mjs\" package.json",
     "build:electron": "tsc -p tsconfig.electron.json",
     "dev:renderer": "vite --config vite.config.mts --host 127.0.0.1 --port 5173",
-    "dev:electron": "npm run build:electron && wait-on http://127.0.0.1:5173 && cross-env QIANCHUAN_RENDERER_URL=http://127.0.0.1:5173 electron .",
+    "dev:electron": "npm run build:electron && wait-on http://127.0.0.1:5173 && node scripts/dev-electron.mjs",
     "typecheck:renderer": "tsc --noEmit",
     "typecheck:electron": "tsc -p tsconfig.electron.json --noEmit",
     "build": "npm run build:renderer && npm run build:electron"

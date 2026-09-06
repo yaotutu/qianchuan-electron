@@ -190,7 +190,11 @@ export const PromotionMonitorPage = ({ currentAccountId, accounts }: PromotionMo
           {tasksState.query.isError && (
             <Alert
               type="error"
-              content="读取本地监控任务失败，请稍后重试。"
+              content={
+                tasksState.query.error instanceof Error
+                  ? tasksState.query.error.message
+                  : '读取本地监控任务失败，请稍后重试。'
+              }
               action={
                 <Button type="text" size="small" onClick={() => void tasksState.query.refetch()}>
                   重试

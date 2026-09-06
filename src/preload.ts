@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
+// preload 变更会由开发脚本自动重新编译并重启 Electron，确保 IPC 契约与 Renderer 保持同步。
 import type {
   MonitorTaskFilters,
   MonitorTaskInput,
