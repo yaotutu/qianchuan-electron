@@ -9,7 +9,13 @@
  * - advertiser_id 必须属于当前 OAuth 授权范围；
  * - 参数校验在客户端完成，防止绕过白名单。
  */
-import type { PromotionPlanDetailInput, PromotionPlanFilters } from '../../shared/contracts/promotion-plan'
+import type {
+  PromotionPlanDetailInput,
+  PromotionPlanDetailSnapshot,
+  PromotionPlanFilters,
+} from '../../shared/contracts/promotion-plan'
+import type { PromotionPlanWriteInput, PromotionPlanWriteResult } from '../../shared/contracts/promotion-plan-write'
+import { buildPromotionPlanWritePreflight } from '../../shared/domain/promotion-plan-write-preflight'
 import type { MonitorPlanSnapshot } from '../monitor-scheduler'
 import type { JsonRecord } from '../infrastructure/oauth-server-client'
 import { QianchuanApiError, type QianchuanApiClient } from '../infrastructure/qianchuan-api-client'
@@ -17,6 +23,7 @@ import {
   buildProductPlanDetailUrl,
   buildProductPlanListUrl,
   normalizeProductPlanResponse,
+  normalizeProductPlanDetailResponse,
   parseProductPlanDetailQuery,
   parseProductPlanQuery,
   type ProductPlanQuery,
@@ -112,9 +119,17 @@ const filtersToParams = (filters: PromotionPlanQuery): Record<string, string | u
 export interface PromotionPlanServiceDeps {
   apiClient: QianchuanApiClient
   tokenProvider: TokenProvider
+  /** 注入当前时间便于稳定验证快照和写后回读。 */
+  now?: () => Date
 }
 
-export const createPromotionPlanService = ({ apiClient, tokenProvider }: PromotionPlanServiceDeps) => {
+const QIANCHUAN_API_ORIGIN = 'https://api.oceanengine.com'
+
+export const createPromotionPlanService = ({
+  apiClient,
+  tokenProvider,
+  now = () => new Date(),
+}: PromotionPlanServiceDeps) => {
   /**
    * 统一执行 OpenAPI 请求，并在明确的 Token 失效错误上做一次有界刷新。
    * 只刷新一次可以防止平台持续报鉴权错误时形成无限重试。
@@ -158,7 +173,101 @@ export const createPromotionPlanService = ({ apiClient, tokenProvider }: Promoti
     const advertiserIds = tokenProvider.getAdvertiserIds()
     const query = parseProductPlanDetailQuery(advertiserId, adId, advertiserIds)
     const url = buildProductPlanDetailUrl(query)
-    return requestWithAccessTokenRefresh((accessToken) => apiClient.request(url, accessToken, '获取计划详情'))
+    const payload = await requestWithAccessTokenRefresh((accessToken) =>
+      apiClient.request(url, accessToken, '获取计划详情'),
+    )
+    return normalizeProductPlanDetailResponse(payload, query.advertiserId, now().toISOString())
+  }
+
+  const validateWriteBaseline = (
+    latestSnapshot: PromotionPlanDetailSnapshot | undefined,
+    input: PromotionPlanWriteInput,
+  ): PromotionPlanWriteResult | undefined => {
+    if (!latestSnapshot) {
+      return { ok: false, status: 'detail_missing', message: '平台未返回最新计划详情，已取消修改。', steps: [] }
+    }
+    if (
+      latestSnapshot.identity.advertiserId !== input.draft.advertiserId ||
+      latestSnapshot.identity.adId !== input.draft.adId
+    ) {
+      return { ok: false, status: 'ownership_mismatch', message: '最新计划归属与草稿不一致，已取消修改。', steps: [] }
+    }
+    if (latestSnapshot.contentHash !== input.draft.baseContentHash) {
+      return {
+        ok: false,
+        status: 'snapshot_conflict',
+        message: '计划配置已被平台或其他用户更新，请刷新详情后重新确认。',
+        steps: [],
+        snapshot: latestSnapshot,
+      }
+    }
+    if (latestSnapshot.identity.status === 'DELETED') {
+      return { ok: false, status: 'plan_deleted', message: '该计划已删除，不能执行修改。', steps: [] }
+    }
+    return undefined
+  }
+
+  /**
+   * 执行真实写入时绝不信任 Renderer 生成的命令：主进程先重新读取详情、比较内容摘要，
+   * 再使用最新快照重新生成白名单增量命令。写完后再次读取详情，让页面拿到平台最终状态。
+   */
+  const update = async (input: PromotionPlanWriteInput): Promise<PromotionPlanWriteResult> => {
+    requireAccessToken()
+    const latestDetail = await getDetail({ advertiserId: input.draft.advertiserId, adId: input.draft.adId })
+    const baselineFailure = validateWriteBaseline(latestDetail.snapshot, input)
+    if (baselineFailure) return baselineFailure
+
+    const latestSnapshot = latestDetail.snapshot!
+    const latestDraft = {
+      ...input.draft,
+      baseSnapshotId: latestSnapshot.snapshotId,
+      baseContentHash: latestSnapshot.contentHash,
+    }
+    const preflight = buildPromotionPlanWritePreflight(latestSnapshot, latestDraft)
+    if (!preflight.valid || preflight.commands.length === 0) {
+      return {
+        ok: false,
+        status: 'preflight_failed',
+        message: preflight.blockingReasons.join('；') || '没有可安全提交的预算或 ROI 修改。',
+        steps: [],
+        snapshot: latestSnapshot,
+      }
+    }
+
+    const steps: PromotionPlanWriteResult['steps'] = []
+    for (const command of preflight.commands) {
+      const operationName = command.operation === 'UPDATE_BUDGET' ? '更新计划预算' : '更新计划支付 ROI'
+      try {
+        const payload = await requestWithAccessTokenRefresh((accessToken) =>
+          apiClient.post(`${QIANCHUAN_API_ORIGIN}${command.endpoint}`, accessToken, command.payload, operationName),
+        )
+        steps.push({
+          operation: command.operation,
+          ok: true,
+          requestId: typeof payload.request_id === 'string' ? payload.request_id : undefined,
+          message: typeof payload.message === 'string' ? payload.message : undefined,
+        })
+      } catch (error) {
+        // 官方增量接口没有跨请求事务：前一步成功、后一步失败时不能自动回滚，必须明确告诉用户可能部分成功。
+        const message = error instanceof Error ? error.message : `${operationName}失败。`
+        steps.push({ operation: command.operation, ok: false, message })
+        return {
+          ok: false,
+          status: steps.some((step) => step.ok) ? 'partial_updated' : 'update_failed',
+          message: `${operationName}失败；之前成功的修改可能已经生效，请刷新详情核对。`,
+          steps,
+        }
+      }
+    }
+
+    const refreshedDetail = await getDetail({ advertiserId: input.draft.advertiserId, adId: input.draft.adId })
+    return {
+      ok: true,
+      status: 'updated',
+      message: '平台已接受修改，并已重新读取最新计划详情。',
+      steps,
+      snapshot: refreshedDetail.snapshot,
+    }
   }
 
   /** 调度器按广告主批量读取计划，并在找到所有目标计划后提前停止翻页。 */
@@ -192,7 +301,7 @@ export const createPromotionPlanService = ({ apiClient, tokenProvider }: Promoti
     return [...foundPlans.values()]
   }
 
-  return { list, getDetail, getAllForMonitor }
+  return { list, getDetail, update, getAllForMonitor }
 }
 
 export type PromotionPlanService = ReturnType<typeof createPromotionPlanService>

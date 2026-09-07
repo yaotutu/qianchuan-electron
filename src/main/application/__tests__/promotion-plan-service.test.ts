@@ -3,13 +3,46 @@ import { describe, expect, it, vi } from 'vitest'
 import { createProductPlanSearch, createPromotionPlanService } from '../promotion-plan-service'
 import type { TokenProvider } from '../promotion-plan-service'
 import { QianchuanApiError, type QianchuanApiClient } from '../../infrastructure/qianchuan-api-client'
+import { normalizeProductPlanDetailResponse } from '../../infrastructure/qianchuan-domain'
 
 /** 创建 mock 千川 API 客户端 */
 const createMockApiClient = (
   handler: (url: string, accessToken: string, operation: string) => Promise<Record<string, unknown>>,
+  postHandler: (
+    url: string,
+    accessToken: string,
+    body: Record<string, unknown>,
+    operation: string,
+  ) => Promise<Record<string, unknown>> = async () => ({ code: 0, request_id: 'write-request' }),
 ): QianchuanApiClient => ({
   request: vi.fn(handler),
+  post: vi.fn(postHandler),
 })
+
+const detailPayload = (overrides: Record<string, unknown> = {}) => ({
+  code: 0,
+  data: {
+    ad_id: 9001,
+    name: '详情计划',
+    status: 'DELIVERY_OK',
+    delivery_setting: { budget: 200, roi2_goal: 2.5, budget_mode: 'BUDGET_MODE_DAY' },
+    ...overrides,
+  },
+})
+
+const createWriteInput = (payload: Record<string, unknown>, changes: Record<string, unknown>) => {
+  const snapshot = normalizeProductPlanDetailResponse(payload, '186001', '2026-09-07T12:00:00.000Z').snapshot!
+  return {
+    draft: {
+      advertiserId: '186001',
+      adId: '9001',
+      baseSnapshotId: snapshot.snapshotId,
+      baseContentHash: snapshot.contentHash,
+      changes,
+    },
+    confirmed: true as const,
+  }
+}
 
 /** 创建 mock TokenProvider；refreshToken 用于模拟一次有界的 Token 刷新。 */
 const createMockTokenProvider = ({
@@ -168,5 +201,149 @@ describe('商品投放计划应用服务', () => {
     expect(url).toContain('advertiser_id=186001')
     expect(url).toContain('ad_id=9001')
     expect(accessToken).toBe('detail-access-token')
+  })
+
+  it('Hash 一致时只调用官方预算与 ROI 增量接口，并在写后重新读取详情', async () => {
+    const payload = detailPayload()
+    const apiClient = createMockApiClient(async () => payload)
+    const service = createPromotionPlanService({
+      apiClient,
+      tokenProvider: createMockTokenProvider(),
+      now: () => new Date('2026-09-07T12:00:00.000Z'),
+    })
+
+    const result = await service.update(createWriteInput(payload, { budgetYuan: 300, roiGoal: 3.2 }))
+
+    expect(result).toMatchObject({ ok: true, status: 'updated' })
+    expect(apiClient.request).toHaveBeenCalledTimes(2)
+    expect(apiClient.post).toHaveBeenCalledTimes(2)
+    expect(vi.mocked(apiClient.post).mock.calls[0][0]).toBe(
+      'https://api.oceanengine.com/open_api/v1.0/qianchuan/uni_promotion/ad/budget/update/',
+    )
+    expect(vi.mocked(apiClient.post).mock.calls[0][2]).toEqual({
+      advertiser_id: 186001,
+      update_budget_infos: [{ ad_id: 9001, budget: 300 }],
+    })
+    expect(vi.mocked(apiClient.post).mock.calls[1][0]).toBe(
+      'https://api.oceanengine.com/open_api/v1.0/qianchuan/uni_promotion/ad/roi2_goal/update/',
+    )
+    expect(vi.mocked(apiClient.post).mock.calls[1][2]).toEqual({
+      advertiser_id: 186001,
+      update_roi2_infos: [{ ad_id: 9001, roi2_goal: 3.2 }],
+    })
+  })
+
+  it('快照冲突、删除计划和不支持字段都不会发送 POST', async () => {
+    const payload = detailPayload()
+    const apiClient = createMockApiClient(async () => payload)
+    const service = createPromotionPlanService({
+      apiClient,
+      tokenProvider: createMockTokenProvider(),
+      now: () => new Date('2026-09-07T12:00:00.000Z'),
+    })
+    const conflictInput = createWriteInput(payload, { budgetYuan: 300 })
+    conflictInput.draft.baseContentHash = 'a'.repeat(64)
+    await expect(service.update(conflictInput)).resolves.toMatchObject({ ok: false, status: 'snapshot_conflict' })
+
+    const nameOnly = createWriteInput(payload, { name: '不支持的名称' })
+    await expect(service.update(nameOnly)).resolves.toMatchObject({ ok: false, status: 'preflight_failed' })
+
+    // 删除场景使用独立客户端，避免复用前面始终返回正常计划的 Mock，导致测试草稿与主进程最新快照不一致。
+    const deletedPayload = detailPayload({ status: 'DELETED' })
+    const deletedClient = createMockApiClient(async () => deletedPayload)
+    const deletedService = createPromotionPlanService({
+      apiClient: deletedClient,
+      tokenProvider: createMockTokenProvider(),
+      now: () => new Date('2026-09-07T12:00:00.000Z'),
+    })
+    await expect(deletedService.update(createWriteInput(deletedPayload, { budgetYuan: 300 }))).resolves.toMatchObject({
+      ok: false,
+      status: 'plan_deleted',
+    })
+    expect(apiClient.post).not.toHaveBeenCalled()
+    expect(deletedClient.post).not.toHaveBeenCalled()
+  })
+
+  it('建议预算模式和超出安全整数范围的 ID 会 fail-closed', async () => {
+    const suggested = detailPayload({
+      delivery_setting: { budget: 200, roi2_goal: 2.5, budget_mode: 'SUGGEST_BUDGET' },
+    })
+    const suggestedClient = createMockApiClient(async () => suggested)
+    const suggestedService = createPromotionPlanService({
+      apiClient: suggestedClient,
+      tokenProvider: createMockTokenProvider(),
+      now: () => new Date('2026-09-07T12:00:00.000Z'),
+    })
+    await expect(suggestedService.update(createWriteInput(suggested, { budgetYuan: 300 }))).resolves.toMatchObject({
+      ok: false,
+      status: 'preflight_failed',
+    })
+    expect(suggestedClient.post).not.toHaveBeenCalled()
+
+    const unsafe = detailPayload({ ad_id: '9007199254740993' })
+    const unsafeClient = createMockApiClient(async () => unsafe)
+    const unsafeService = createPromotionPlanService({
+      apiClient: unsafeClient,
+      tokenProvider: createMockTokenProvider(),
+      now: () => new Date('2026-09-07T12:00:00.000Z'),
+    })
+    const unsafeSnapshot = normalizeProductPlanDetailResponse(unsafe, '186001', '2026-09-07T12:00:00.000Z').snapshot!
+    await expect(
+      unsafeService.update({
+        draft: {
+          advertiserId: '186001',
+          adId: unsafeSnapshot.identity.adId,
+          baseSnapshotId: unsafeSnapshot.snapshotId,
+          baseContentHash: unsafeSnapshot.contentHash,
+          changes: { roiGoal: 3 },
+        },
+        confirmed: true,
+      }),
+    ).resolves.toMatchObject({ ok: false, status: 'preflight_failed' })
+    expect(unsafeClient.post).not.toHaveBeenCalled()
+  })
+
+  it('第二个写步骤失败时明确返回部分成功，不宣称事务性', async () => {
+    const payload = detailPayload()
+    const apiClient = createMockApiClient(
+      async () => payload,
+      async (url) => {
+        if (url.includes('roi2_goal')) throw new QianchuanApiError('更新 ROI 被平台拒绝', '40030')
+        return { code: 0, request_id: 'budget-ok' }
+      },
+    )
+    const service = createPromotionPlanService({
+      apiClient,
+      tokenProvider: createMockTokenProvider(),
+      now: () => new Date('2026-09-07T12:00:00.000Z'),
+    })
+    const result = await service.update(createWriteInput(payload, { budgetYuan: 300, roiGoal: 3.2 }))
+    expect(result).toMatchObject({ ok: false, status: 'partial_updated' })
+    expect(result.steps).toEqual([
+      expect.objectContaining({ operation: 'UPDATE_BUDGET', ok: true }),
+      expect.objectContaining({ operation: 'UPDATE_ROI', ok: false }),
+    ])
+  })
+
+  it('写接口遇到明确 Token 失效时只刷新一次', async () => {
+    const payload = detailPayload()
+    const post = vi.fn(async (_url: string, accessToken: string) => {
+      if (accessToken === 'expired-access-token')
+        throw new QianchuanApiError('Token 失效', '40105', 'r-token', 'Access token invalid')
+      return { code: 0, request_id: 'write-after-refresh' }
+    })
+    const apiClient = createMockApiClient(async () => payload, post)
+    const tokenProvider = createMockTokenProvider({
+      accessToken: 'expired-access-token',
+      refreshedAccessToken: 'refreshed-access-token',
+    })
+    const service = createPromotionPlanService({
+      apiClient,
+      tokenProvider,
+      now: () => new Date('2026-09-07T12:00:00.000Z'),
+    })
+    await expect(service.update(createWriteInput(payload, { budgetYuan: 300 }))).resolves.toMatchObject({ ok: true })
+    expect(post).toHaveBeenCalledTimes(2)
+    expect(tokenProvider.refreshAccessToken).toHaveBeenCalledTimes(1)
   })
 })

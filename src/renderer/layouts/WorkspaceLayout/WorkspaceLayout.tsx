@@ -208,7 +208,11 @@ export const WorkspaceLayout = ({ authorization, onReauthorize }: WorkspaceLayou
         </Sider>
 
         <Content className="workspace-content">
-          <WorkspaceRoutes accounts={normalizedAccounts} currentAccountId={currentAccountId} />
+          <WorkspaceRoutes
+            accounts={normalizedAccounts}
+            currentAccountId={currentAccountId}
+            authorization={authorization}
+          />
         </Content>
       </Layout>
     </Layout>

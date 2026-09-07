@@ -1,6 +1,6 @@
 # 电小奇 · 千川 Electron 客户端
 
-当前客户端负责桌面登录交互、千川超级商品卡工作台和本地推广监控。客户端不直接访问巨量接口；敏感 OAuth 操作由独立维护、独立部署的 `qianchuan-oauth-callback` 服务端完成。
+当前客户端负责桌面登录交互、千川超级商品卡工作台和本地推广监控。Electron 主进程直接调用巨量官方 `/open_api/...` 接口；独立部署的 `qianchuan-oauth-callback` 只负责 OAuth 授权、Refresh Token 加密持久化和 Access Token 自动刷新。
 
 两个项目目前位于同一工作区，后续会拆成两个独立仓库维护。Electron 项目只依赖 OAuth 服务端约定的 HTTP 接口，不建立 monorepo，也不共享运行时包。
 
@@ -71,8 +71,9 @@ Electron Main
     ▼
 qianchuan-oauth-callback（独立项目）
     ├── OAuth 回调与授权尝试
-    ├── Access Token 安全存储与刷新
-    └── 千川只读计划代理
+    └── Access Token 自动刷新与授权恢复
+
+Electron 主进程直接调用巨量官方 `/open_api/...`；OAuth 服务端不代理任何千川业务请求。
 ```
 
 应用业务状态、监控规则、分组、启停、调度、执行日志和本地持久化全部留在 Electron 主进程。Renderer 只负责界面、路由和查询缓存；服务端不承载客户端任务 CRUD 或调度逻辑。
@@ -80,13 +81,15 @@ qianchuan-oauth-callback（独立项目）
 ## 登录流程
 
 1. React 通过 TanStack Query 调用 preload 暴露的健康检查和当前授权接口；
-2. Electron 主进程请求 `/oauth/oceanengine/start?format=json`；
+2. Electron 主进程请求 `/oauth/oceanengine/start`；
 3. 主进程保存服务端返回的 `attemptId`，并使用系统浏览器打开授权 URL；
-4. 巨量回调到独立服务端后，服务端换 Token 并获取用户信息；
-5. React 通过 Query 定时轮询 `/oauth/result?attempt_id=...`；
-6. 登录成功后，工作台使用服务端返回的广告主账号列表和商品投放计划。
+4. 巨量回调到独立服务端后，服务端换取并加密保存 Access Token / Refresh Token；
+5. React 通过 Query 定时轮询 `/oauth/result?attempt_id=...`，主进程同时缓存短期 Access Token；
+6. Electron 主进程直接调用巨量官方 `/open_api/...`，Renderer 只收到脱敏后的广告主和计划数据。
 
-Electron Renderer 不接触 App Secret、Access Token、Refresh Token、`auth_code` 或完整授权 URL。
+应用重启后不会要求用户每天重新授权：主进程启动时请求 `/oauth/current`，服务端读取加密授权并在需要时用 Refresh Token 刷新，再把新的短期 Access Token 返回给主进程。只有 Refresh Token 过期、授权被撤销或权限发生变化时，才需要重新授权。
+
+Electron Renderer 不接触 App Secret、Access Token、Refresh Token、`auth_code` 或完整授权 URL。Access Token 只在主进程内存中短期存在，不写入磁盘；Refresh Token 永远只在 OAuth 服务端保存和使用。
 
 ## 商品投放计划
 

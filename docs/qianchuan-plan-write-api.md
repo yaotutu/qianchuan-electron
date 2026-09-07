@@ -65,9 +65,9 @@
 1. 用户在详情页编辑并查看字段级 Diff。
 2. 通过能力矩阵和字段白名单生成提交准备命令；不支持或资料不完整的字段必须阻塞。
 3. 用户明确二次确认本次具体变更、广告主、计划和目标值。
-4. 服务端使用 OAuth 安全存储的 Access Token 调用官方 `/open_api/...`，Electron 和 Renderer 不接触 Token。
+4. Electron 主进程从 OAuth 服务端获取短期 Access Token 后，直接调用官方 `/open_api/...`；Refresh Token 始终只在 OAuth 服务端保存和使用。Renderer 不接触任何 Token。
 5. 服务端重新读取计划详情，校验广告主归属、计划状态、平台权限和 `baseContentHash`；不一致则拒绝写入。
-6. 只发送本次 Diff 对应的增量接口，禁止把内部网页 `/ad/api/...` 当成正式开放接口。
+6. 只发送本次 Diff 对应的官方增量接口；本项目不实现网页内部接口兼容层。
 7. 解析批量接口的逐条 `SUCCESS/FAILED` 结果，并返回脱敏的审计结果和 `request_id`。
 8. 写入成功后重新读取详情，生成新的快照和内容摘要；失败不得假报成功。
 

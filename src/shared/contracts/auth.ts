@@ -3,9 +3,9 @@ import { z } from 'zod'
 /**
  * 授权相关契约。
  *
- * 服务端 /oauth/current 现在直接返回 Access Token 和 Refresh Token，
- * 供 Electron 主进程直接调用巨量平台 API。
- * Token 只在主进程内存中，不传给 Renderer。
+ * 服务端 /oauth/current 只把短期 Access Token 返回给 Electron 主进程，
+ * 供主进程直接调用巨量平台 API；Refresh Token 永远留在 OAuth 服务端。
+ * 任何 Token 都不通过 IPC 传给 Renderer。
  */
 export const advertiserAccountSchema = z
   .object({
@@ -34,12 +34,11 @@ export const authorizationSchema = z
       })
       .passthrough()
       .optional(),
-    // Renderer 只允许拿到账户和到期信息；Access Token / Refresh Token
-    // 停留在 Electron 主进程内存中，绝不能通过 IPC 返回。
+    // Renderer 只允许拿到账户和 Access Token 到期信息；
+    // Access Token / Refresh Token 原文和 Refresh Token 到期时间都不通过 IPC 返回。
     token: z
       .object({
         accessTokenExpiresAt: z.string().optional(),
-        refreshTokenExpiresAt: z.string().optional(),
         advertiserIds: z.array(z.union([z.string(), z.number()]).transform(String)).optional(),
         advertiserAccounts: z.array(advertiserAccountSchema).optional(),
       })

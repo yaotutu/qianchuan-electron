@@ -70,6 +70,75 @@ describe('授权应用服务', () => {
     expect(service.getAdvertiserIds()).toEqual(['186001'])
   })
 
+  it('并发恢复授权时只请求一次 OAuth 服务端，避免重复刷新 Refresh Token', async () => {
+    let resolveRequest: ((value: Record<string, unknown>) => void) | undefined
+    const request = vi.fn(
+      () =>
+        new Promise<Record<string, unknown>>((resolve) => {
+          resolveRequest = resolve
+        }),
+    )
+    const service = createAuthService({ client: createClient(request), openExternal: async () => undefined })
+
+    const first = service.getCurrentAuthorization()
+    const second = service.getCurrentAuthorization()
+    expect(request).toHaveBeenCalledTimes(1)
+
+    resolveRequest?.({
+      ok: true,
+      status: 'success',
+      token: {
+        accessToken: 'restored-access-token',
+        refreshToken: 'server-only-refresh-token',
+        advertiserIds: ['186001'],
+      },
+    })
+
+    const [firstResult, secondResult] = await Promise.all([first, second])
+    expect(firstResult).toEqual(secondResult)
+    expect(service.getAccessToken()).toBe('restored-access-token')
+  })
+
+  it('平台明确拒绝旧 Access Token 时只强制刷新一次，并把新 Token 留在主进程', async () => {
+    const request = vi.fn(async (pathname: string) => {
+      if (pathname === '/oauth/current?force_refresh=true') {
+        return {
+          ok: true,
+          status: 'success',
+          token: {
+            accessToken: 'fresh-access-token',
+            refreshToken: 'server-only-refresh-token',
+            advertiserIds: ['186001'],
+          },
+        }
+      }
+      throw new Error(`unexpected OAuth request: ${pathname}`)
+    })
+    const service = createAuthService({ client: createClient(request), openExternal: async () => undefined })
+
+    await expect(service.refreshAccessToken()).resolves.toBe('fresh-access-token')
+    expect(request).toHaveBeenCalledTimes(1)
+    expect(request).toHaveBeenCalledWith('/oauth/current?force_refresh=true')
+    expect(service.getAccessToken()).toBe('fresh-access-token')
+  })
+
+  it('强制刷新失败时清空主进程中的旧 Access Token', async () => {
+    const request = vi.fn(async (pathname: string) => {
+      if (pathname === '/oauth/current') {
+        return { ok: true, status: 'success', token: { accessToken: 'stale-access-token' } }
+      }
+      if (pathname === '/oauth/current?force_refresh=true') {
+        throw createHttpError(401, { status: 'reauthorization_required' })
+      }
+      throw new Error(`unexpected OAuth request: ${pathname}`)
+    })
+    const service = createAuthService({ client: createClient(request), openExternal: async () => undefined })
+
+    await service.getCurrentAuthorization()
+    await expect(service.refreshAccessToken()).resolves.toBeNull()
+    expect(service.getAccessToken()).toBeNull()
+  })
+
   it('服务端返回无效授权时也不会向 Renderer 泄露 Refresh Token', async () => {
     const client = createClient(async (pathname) => {
       if (pathname === '/oauth/current') {

@@ -49,6 +49,9 @@ export const promotionPlanSchema = z
       .object({
         costYuan: z.union([z.number(), z.string()]).optional(),
         payRoi: z.union([z.number(), z.string()]).optional(),
+        payGmvYuan: z.union([z.number(), z.string()]).optional(),
+        payOrderCount: z.union([z.number(), z.string()]).optional(),
+        costPerPayOrderYuan: z.union([z.number(), z.string()]).optional(),
       })
       .passthrough()
       .optional(),

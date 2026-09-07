@@ -120,10 +120,19 @@ export const createMonitorScheduler = (dependencies: SchedulerDependencies) => {
     if (result.status === 'TRIGGERED' && task.lastResult.status !== 'TRIGGERED') {
       dependencies.notify?.(task, result)
     }
+    return result.status
   }
 
   const runOnce = async (options: { force?: boolean; advertiserId?: string } = {}) => {
-    if (checking) return { checkedCount: 0, skipped: true }
+    if (checking)
+      return {
+        checkedCount: 0,
+        triggeredCount: 0,
+        normalCount: 0,
+        errorCount: 0,
+        dataMissingCount: 0,
+        skipped: true,
+      }
     checking = true
     try {
       const timestamp = now()
@@ -135,7 +144,7 @@ export const createMonitorScheduler = (dependencies: SchedulerDependencies) => {
       )
       const groupedTasks = groupByAdvertiser(runningTasks)
 
-      await Promise.all(
+      const groupResults = await Promise.all(
         [...groupedTasks.entries()].map(async ([advertiserId, tasks]) => {
           let plans: MonitorPlanSnapshot[]
           try {
@@ -154,14 +163,23 @@ export const createMonitorScheduler = (dependencies: SchedulerDependencies) => {
                 dependencies.onTaskChanged?.(updatedTask)
               }),
             )
-            return
+            return tasks.map(() => 'ERROR' as const)
           }
 
           // 用户可能在网络请求期间删除任务；单条写回失败不应中断同账号的其他任务。
-          await Promise.allSettled(tasks.map((task) => checkTask(task, plans, timestamp)))
+          const settled = await Promise.allSettled(tasks.map((task) => checkTask(task, plans, timestamp)))
+          return settled.map((item) => (item.status === 'fulfilled' ? item.value : ('ERROR' as const)))
         }),
       )
-      return { checkedCount: runningTasks.length, skipped: false }
+      const statuses = groupResults.flat()
+      return {
+        checkedCount: runningTasks.length,
+        triggeredCount: statuses.filter((status) => status === 'TRIGGERED').length,
+        normalCount: statuses.filter((status) => status === 'NORMAL').length,
+        errorCount: statuses.filter((status) => status === 'ERROR').length,
+        dataMissingCount: statuses.filter((status) => status === 'DATA_MISSING').length,
+        skipped: false,
+      }
     } finally {
       checking = false
     }

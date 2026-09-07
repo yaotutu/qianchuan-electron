@@ -21,6 +21,11 @@ export const createAuthService = ({ client, openExternal, now = () => new Date()
   // Access Token 是用户级别的短期凭证（约 1 小时过期），缓存在主进程内存中
   let cachedAccessToken: string | null = null
   let cachedAdvertiserIds: string[] = []
+  /**
+   * 启动恢复、Renderer 首次查询和 Token 失效重试可能同时触发 /oauth/current。
+   * 合并并发请求可以避免同一时刻重复刷新服务端 Refresh Token，也避免缓存被较旧响应覆盖。
+   */
+  let authorizationRestoreInFlight: Promise<JsonRecord> | null = null
 
   const clearActiveAttempt = () => {
     activeAttemptId = null
@@ -28,7 +33,7 @@ export const createAuthService = ({ client, openExternal, now = () => new Date()
   }
 
   const startLogin = async () => {
-    const result = await client.request('/oauth/oceanengine/start?format=json')
+    const result = await client.request('/oauth/oceanengine/start')
     if (result.ok !== true || typeof result.authorizationUrl !== 'string' || typeof result.attemptId !== 'string') {
       return { ok: false, status: 'server_unavailable', message: '登录服务暂未准备好，请稍后重试。' }
     }
@@ -65,7 +70,6 @@ export const createAuthService = ({ client, openExternal, now = () => new Date()
       ...safeResult,
       token: {
         accessTokenExpiresAt: authorizationToken.accessTokenExpiresAt,
-        refreshTokenExpiresAt: authorizationToken.refreshTokenExpiresAt,
         advertiserIds: Array.isArray(authorizationToken.advertiserIds)
           ? authorizationToken.advertiserIds.map(String)
           : [],
@@ -91,24 +95,32 @@ export const createAuthService = ({ client, openExternal, now = () => new Date()
 
   /**
    * 主进程内部使用的授权载荷。
-   * Access Token / Refresh Token 只停留在这个函数和本地缓存中，
+   * Access Token 只停留在主进程内存中；Refresh Token 永远只由 OAuth 服务端持久化和使用。
    * 返回 Renderer 前会被裁剪为非敏感字段。
    */
-  const readAuthorization = async () => {
-    const result = await client.request('/oauth/current')
-    const token = result.token as AuthorizationToken | undefined
+  const readAuthorization = async (forceRefresh = false) => {
+    if (authorizationRestoreInFlight) return authorizationRestoreInFlight
 
-    if (token?.accessToken) {
-      cachedAccessToken = token.accessToken
-      cachedAdvertiserIds = Array.isArray(token.advertiserIds) ? token.advertiserIds.map(String) : []
-    } else {
-      // 授权被撤销或尚未建立时必须清空旧缓存，避免继续使用已作废的本地凭证。
-      cachedAccessToken = null
-      cachedAdvertiserIds = []
-    }
+    authorizationRestoreInFlight = (async () => {
+      const result = await client.request(forceRefresh ? '/oauth/current?force_refresh=true' : '/oauth/current')
+      const token = result.token as AuthorizationToken | undefined
 
-    // 无论服务端是否有有效 Access Token，都不能把 Token 原文传给 Renderer。
-    return stripTokenSecrets(result)
+      if (token?.accessToken) {
+        cachedAccessToken = token.accessToken
+        cachedAdvertiserIds = Array.isArray(token.advertiserIds) ? token.advertiserIds.map(String) : []
+      } else {
+        // 授权被撤销或尚未建立时必须清空旧缓存，避免继续使用已作废的本地凭证。
+        cachedAccessToken = null
+        cachedAdvertiserIds = []
+      }
+
+      // 无论服务端是否有有效 Access Token，都不能把 Token 原文传给 Renderer。
+      return stripTokenSecrets(result)
+    })().finally(() => {
+      authorizationRestoreInFlight = null
+    })
+
+    return authorizationRestoreInFlight
   }
 
   /** Renderer 使用的当前授权状态；这里保证不会返回 Token 原文。 */
@@ -142,8 +154,23 @@ export const createAuthService = ({ client, openExternal, now = () => new Date()
    * 每次 OpenAPI 请求返回 Token 失效错误时最多调用一次，避免无限重试。
    */
   const refreshAccessToken = async () => {
-    await getCurrentAuthorization()
-    return cachedAccessToken
+    try {
+      await readAuthorization(true)
+      return cachedAccessToken
+    } catch (error) {
+      const details = getRequestErrorDetails(error)
+      if (details.status === 404) {
+        cachedAccessToken = null
+        cachedAdvertiserIds = []
+        return null
+      }
+      if (details.status === 401) {
+        cachedAccessToken = null
+        cachedAdvertiserIds = []
+        return null
+      }
+      throw error
+    }
   }
 
   const getHealth = async () => {
@@ -167,7 +194,10 @@ export const createAuthService = ({ client, openExternal, now = () => new Date()
     getLoginStatus,
     getCurrentAuthorization,
     getHealth,
-    /** 返回主进程缓存的 Access Token，供千川 API 客户端直接使用。 */
+    /**
+     * 返回主进程缓存的 Access Token，供千川 API 客户端直接使用。
+     * 应用退出后该值自然丢失，下次启动由 /oauth/current 自动恢复，不能从磁盘读取。
+     */
     getAccessToken: () => cachedAccessToken,
     /** 返回当前授权的广告主 ID 列表，用于越权检查。 */
     getAdvertiserIds: () => cachedAdvertiserIds,

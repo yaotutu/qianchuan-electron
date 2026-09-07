@@ -88,7 +88,14 @@ describe('本地监控调度器', () => {
       now: () => new Date('2026-09-05T02:35:00.000Z'),
     })
 
-    await expect(scheduler.runOnce()).resolves.toEqual({ checkedCount: 1, skipped: false })
+    await expect(scheduler.runOnce()).resolves.toEqual({
+      checkedCount: 1,
+      triggeredCount: 0,
+      normalCount: 0,
+      errorCount: 1,
+      dataMissingCount: 0,
+      skipped: false,
+    })
     expect(tasks[0].lastResult).toMatchObject({ status: 'ERROR', message: '本次检查失败：服务端暂时不可用' })
   })
 })

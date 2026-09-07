@@ -5,7 +5,7 @@ import type {
   PromotionPlanEditDraft,
   PromotionPlanEditableField,
   PromotionPlanFieldChange,
-} from '../../../shared/contracts'
+} from '../contracts'
 
 const EDITABLE_FIELDS: ReadonlyArray<{
   field: PromotionPlanEditableField

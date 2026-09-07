@@ -120,10 +120,7 @@ button { cursor: pointer; }
 .pagination { display: flex; min-height: 55px; align-items: center; justify-content: space-between; gap: 16px; padding: 0 14px; border-top: 1px solid var(--color-border); color: #8893a5; font-size: 12px; }
 .pagination > div:first-child { display: flex; align-items: center; gap: 12px; }
 .sync-state, .query-range { color: #9ca6b5; }
-.feature-placeholder { display: grid; min-height: calc(100vh - 125px); align-content: center; justify-items: center; gap: 14px; padding: 48px; text-align: center; }
 .placeholder-icon { display: grid; width: 64px; height: 64px; place-items: center; border-radius: 18px; color: var(--color-primary); background: var(--color-primary-soft); font-size: 26px; font-weight: 700; }
-.feature-placeholder h2 { margin: 3px 0 0; }
-.feature-placeholder .arco-btn { margin-top: 8px; }
 
 @media (max-width: 1280px) {
   .topbar-center { display: none; }

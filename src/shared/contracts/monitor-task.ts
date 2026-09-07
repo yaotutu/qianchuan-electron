@@ -163,7 +163,7 @@ export const monitorTaskSchema = z.object({
   lastCheckedAt: z.string().nullable().optional().default(null),
   lastResult: z
     .object({
-      // 服务端或历史本地文件可能增加结果状态，读取时保持向后兼容。
+      // 结果状态由主进程统一计算；未知状态仍保留为字符串，避免边界数据导致 Renderer 崩溃。
       status: z.string(),
       message: z.string(),
     })
@@ -198,6 +198,10 @@ export const monitorTaskRunResultSchema = z
     status: z.string().optional(),
     message: z.string().optional(),
     checkedCount: z.number().optional().default(0),
+    triggeredCount: z.number().optional().default(0),
+    normalCount: z.number().optional().default(0),
+    errorCount: z.number().optional().default(0),
+    dataMissingCount: z.number().optional().default(0),
     skipped: z.boolean().optional().default(false),
   })
   .passthrough()

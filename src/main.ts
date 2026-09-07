@@ -27,8 +27,14 @@ const mainWindowOptions = {
 }
 let monitorScheduler: ReturnType<typeof createMonitorScheduler> | null = null
 
-/** 主进程作为组合根，只负责创建依赖和管理 Electron 生命周期。 */
-app.whenReady().then(() => {
+/**
+ * 主进程作为组合根，只负责创建依赖和管理 Electron 生命周期。
+ *
+ * 注意：Access Token 不落盘。应用重启后的恢复必须先通过 OAuth 服务端的
+ * /oauth/current 取得新的短期 Access Token，再启动本地监控调度，避免调度器
+ * 在授权缓存尚未恢复时就发起一批必然失败的千川请求。
+ */
+app.whenReady().then(async () => {
   const oauthServerClient = createOAuthServerClient({ baseUrl: oauthServerUrl })
   const authService = createAuthService({
     client: oauthServerClient,
@@ -60,8 +66,22 @@ app.whenReady().then(() => {
   const monitorTaskService = createMonitorTaskService(monitorTaskStore, monitorScheduler)
 
   registerIpcHandlers({ authService, promotionPlanService, monitorTaskService })
-  monitorScheduler.start()
   void createMainWindow(mainWindowOptions)
+
+  // 这是非阻塞的启动恢复：窗口先打开，登录页可以立即显示；调度器则等本次
+  // 恢复请求结束后再启动。OAuth 服务暂时不可用时不阻塞应用，只记录非敏感状态。
+  try {
+    const authorization = await authService.getCurrentAuthorization()
+    if (authorization.status === 'success') {
+      console.info('已从 OAuth 服务端恢复当前授权，监控调度器即将启动。')
+    } else if (authorization.status !== 'idle') {
+      console.warn(`启动时未恢复授权（${authorization.status ?? 'unknown'}），监控任务将在重新授权后继续工作。`)
+    }
+  } catch {
+    console.warn('启动时暂时无法连接 OAuth 服务端，应用仍会打开登录页；监控调度器将在本次恢复尝试后启动。')
+  } finally {
+    monitorScheduler.start()
+  }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) void createMainWindow(mainWindowOptions)

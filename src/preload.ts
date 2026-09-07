@@ -8,6 +8,7 @@ import type {
   MonitorTaskUpdateInput,
 } from './shared/contracts/monitor-task'
 import type { PromotionPlanDetailInput, PromotionPlanFilters } from './shared/contracts/promotion-plan'
+import type { PromotionPlanWriteInput } from './shared/contracts/promotion-plan-write'
 
 /**
  * preload 是 Renderer 和主进程之间唯一的安全边界。
@@ -23,6 +24,7 @@ const authBridge = {
 const promotionMonitorBridge = {
   listPlans: (filters: PromotionPlanFilters) => ipcRenderer.invoke(IPC_CHANNELS.promotionPlan.list, filters),
   getPlanDetail: (input: PromotionPlanDetailInput) => ipcRenderer.invoke(IPC_CHANNELS.promotionPlan.detail, input),
+  updatePlan: (input: PromotionPlanWriteInput) => ipcRenderer.invoke(IPC_CHANNELS.promotionPlan.update, input),
   listTasks: (filters: MonitorTaskFilters) => ipcRenderer.invoke(IPC_CHANNELS.monitorTask.list, filters),
   createTask: (input: MonitorTaskCreateInput) => ipcRenderer.invoke(IPC_CHANNELS.monitorTask.create, input),
   updateTask: (taskId: string, input: MonitorTaskUpdateInput) =>

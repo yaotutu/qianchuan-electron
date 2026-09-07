@@ -74,7 +74,9 @@ export const PromotionMonitorPage = ({ currentAccountId, accounts }: PromotionMo
         return
       }
       showSuccessFeedback(
-        result.skipped ? '已有检查正在执行，请稍后查看结果。' : `本次已检查 ${result.checkedCount} 条运行中任务。`,
+        result.skipped
+          ? '已有检查正在执行，请稍后查看结果。'
+          : `已检查 ${result.checkedCount} 条：触发 ${result.triggeredCount}，正常 ${result.normalCount}，缺少数据 ${result.dataMissingCount}，失败 ${result.errorCount}。`,
       )
     },
     onError: (error) => showErrorFeedback(error instanceof Error ? error.message : '立即检查失败。'),

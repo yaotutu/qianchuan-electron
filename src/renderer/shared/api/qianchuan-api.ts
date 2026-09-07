@@ -9,6 +9,9 @@ import {
   monitorTaskRunResultSchema,
   type PromotionPlanDetailInput,
   type PromotionPlanFilters,
+  promotionPlanWriteInputSchema,
+  promotionPlanWriteResultSchema,
+  type PromotionPlanWriteInput,
   type MonitorTaskFilters,
   type MonitorTaskCreateInput,
   type MonitorTaskUpdateInput,
@@ -63,6 +66,12 @@ export const qianchuanApi = {
   getPromotionPlanDetail: (input: PromotionPlanDetailInput) =>
     runBridgeRequest('读取推广计划详情', async () =>
       promotionPlanDetailResultSchema.parse(await getBridge().promotionMonitor.getPlanDetail(input)),
+    ),
+  updatePromotionPlan: (input: PromotionPlanWriteInput) =>
+    runBridgeRequest('提交推广计划修改', async () =>
+      promotionPlanWriteResultSchema.parse(
+        await getBridge().promotionMonitor.updatePlan(promotionPlanWriteInputSchema.parse(input)),
+      ),
     ),
   listMonitorTasks: (filters: MonitorTaskFilters) =>
     runBridgeRequest('读取本地监控任务', async () =>

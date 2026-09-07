@@ -57,15 +57,19 @@ const requestJson = async (
   timeoutMs: number,
   fetchImpl: typeof fetch,
   operation: string,
+  method: 'GET' | 'POST' = 'GET',
+  body?: JsonRecord,
 ): Promise<JsonRecord> => {
   let response: Response
   try {
     response = await fetchImpl(url, {
-      method: 'GET',
+      method,
       headers: {
         Accept: 'application/json',
         'Access-Token': accessToken,
+        ...(method === 'POST' ? { 'Content-Type': 'application/json' } : {}),
       },
+      ...(method === 'POST' && body ? { body: JSON.stringify(body) } : {}),
       signal: AbortSignal.timeout(timeoutMs),
     })
   } catch (error) {
@@ -113,12 +117,15 @@ export const createQianchuanApiClient = ({
   timeoutMs = 15_000,
   fetchImpl = fetch,
 }: QianchuanApiClientOptions = {}) => ({
-  /**
-   * 发起 GET 请求到巨量开放平台接口。
-   * 参数已经编码在 url 中，Access Token 通过请求头传递。
-   */
+  /** 发起 GET 请求；参数已经编码在 URL 中，Access Token 通过请求头传递。 */
   request: async (url: string, accessToken: string, operation: string): Promise<JsonRecord> =>
     requestJson(url, accessToken, timeoutMs, fetchImpl, operation),
+  /**
+   * 发起受控 POST 请求。调用方只能传递已由领域层生成并校验的 JSON 载荷，
+   * Access Token 仍只存在于主进程调用栈中，Renderer 永远看不到请求头。
+   */
+  post: async (url: string, accessToken: string, body: JsonRecord, operation: string): Promise<JsonRecord> =>
+    requestJson(url, accessToken, timeoutMs, fetchImpl, operation, 'POST', body),
 })
 
 /** 业务服务依赖的客户端类型；保持构造函数返回形状和公共类型解耦。 */

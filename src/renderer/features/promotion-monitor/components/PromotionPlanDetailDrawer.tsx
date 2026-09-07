@@ -180,10 +180,10 @@ const PlanDetailContent = ({ snapshot }: { snapshot: PromotionPlanDetailSnapshot
         <Tag color={capabilities.canUpdateRoi ? 'green' : 'gray'}>
           ROI：{capabilities.canUpdateRoi ? '自定义投放可评估' : '需自定义投放'}
         </Tag>
-        <Tag color="gray">真实写操作：暂未开放</Tag>
+        <Tag color="arcoblue">真实写操作：预算 / ROI 已开放</Tag>
       </div>
       <div className="plan-detail-note">
-        <Text type="secondary">{capabilities.reasons.join(' ')}</Text>
+        <Text type="secondary">{capabilities.reasons.join(' ')} 名称与投放时间仍暂未开放。</Text>
       </div>
     </div>
   )

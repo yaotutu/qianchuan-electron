@@ -1,6 +1,6 @@
 /**
- * IPC channel 是主进程与 preload 的内部协议，统一定义可避免两端字符串逐渐漂移。
- * 字符串值保持历史兼容，重构不会要求 Renderer 和主进程同时切换到新协议。
+ * IPC channel 是主进程与 preload 的唯一内部协议。
+ * 所有新增或修改都必须同步更新主进程 handler、preload 暴露接口和 Renderer 类型。
  */
 export const IPC_CHANNELS = {
   auth: {
@@ -12,6 +12,7 @@ export const IPC_CHANNELS = {
   promotionPlan: {
     list: 'plans:list',
     detail: 'plans:detail',
+    update: 'plans:update',
   },
   monitorTask: {
     list: 'monitor-tasks:list',

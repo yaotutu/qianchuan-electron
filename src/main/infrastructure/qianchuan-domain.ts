@@ -7,6 +7,10 @@
  * Access Token 的获取由调用方负责，本模块不接触 Token。
  */
 
+import { createHash } from 'node:crypto'
+
+import type { PromotionPlanDetailResult, PromotionPlanDetailSnapshot } from '../../shared/contracts/promotion-plan'
+
 // ─── 常量 ──────────────────────────────────────────────────
 
 export const PRODUCT_PLAN_FIELDS = Object.freeze([
@@ -294,4 +298,201 @@ export const buildProductPlanDetailUrl = (query: ProductPlanDetailQuery): string
   url.searchParams.set('advertiser_id', query.advertiserId)
   url.searchParams.set('ad_id', query.adId)
   return url.toString()
+}
+
+// ─── 详情响应标准化 ─────────────────────────────────────────
+
+type JsonRecord = Record<string, unknown>
+
+const asRecord = (value: unknown): JsonRecord =>
+  value && typeof value === 'object' && !Array.isArray(value) ? (value as JsonRecord) : {}
+
+const asArray = (value: unknown): JsonRecord[] => (Array.isArray(value) ? value.map(asRecord) : [])
+
+const textOrUndefined = (value: unknown): string | undefined => {
+  if (value === undefined || value === null || value === '') return undefined
+  return String(value)
+}
+
+const finiteOrUndefined = (value: unknown): number | undefined => {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : undefined
+}
+
+const booleanOrUndefined = (value: unknown): boolean | undefined => (typeof value === 'boolean' ? value : undefined)
+
+/** 对对象键排序后序列化，保证平台字段顺序变化不会导致同一业务配置产生不同摘要。 */
+const stableSerialize = (value: unknown): string => {
+  if (Array.isArray(value)) return `[${value.map(stableSerialize).join(',')}]`
+  if (value && typeof value === 'object') {
+    return `{${Object.keys(value as JsonRecord)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${stableSerialize((value as JsonRecord)[key])}`)
+      .join(',')}}`
+  }
+  return JSON.stringify(value) ?? 'null'
+}
+
+const calculateContentHash = (content: unknown) => createHash('sha256').update(stableSerialize(content)).digest('hex')
+
+const normalizeCreative = (data: JsonRecord, delivery: JsonRecord): PromotionPlanDetailSnapshot['creative'] => {
+  const creativeSetting = asRecord(data.creative_setting)
+  const multiCreative = asArray(data.multi_product_creative_list)
+  const programmatic = asArray(data.programmatic_creative_media_list)
+  const allCreative = [...multiCreative, ...programmatic]
+  const videos = allCreative.flatMap((item) => asArray(item.video_material))
+  const images = allCreative.flatMap((item) => asArray(item.image_material))
+  const titles = allCreative.flatMap((item) => asArray(item.title_material))
+  const carousels = allCreative.flatMap((item) => asArray(item.carousel_material))
+  const blocked = allCreative.flatMap((item) => asArray(item.block_material))
+  const selectedStarProductIds = allCreative
+    .map((item) => item.product_id)
+    .filter((value) => value !== undefined && value !== null && value !== '')
+    .map(String)
+
+  return {
+    smartSelectMaterial: booleanOrUndefined(delivery.smart_select_material ?? creativeSetting.smart_select_material),
+    hideInAweme: booleanOrUndefined(creativeSetting.hide_in_aweme),
+    enableAigcCreative: booleanOrUndefined(delivery.enable_aigc_creative),
+    liveRoomViewEnabled: booleanOrUndefined(delivery.live_room_view_enabled),
+    selfSelectedVideoEnabled: booleanOrUndefined(delivery.self_selected_video_enabled),
+    selectedStarProductIds: [...new Set(selectedStarProductIds)],
+    videoCount: videos.length,
+    imageCount: images.length,
+    titleCount: titles.length,
+    carouselCount: carousels.length,
+    blockedMaterialCount: blocked.length,
+    titles: titles
+      .map((item) => textOrUndefined(item.title))
+      .filter((value): value is string => Boolean(value))
+      .slice(0, 50),
+  }
+}
+
+/**
+ * 把巨量详情原始响应裁剪为稳定、可审计的业务快照。
+ * 详情接口可能返回超大 ID 和大量素材元数据，必须在主进程完成字符串化、聚合和白名单裁剪，
+ * Renderer 只接收快照，不接触平台原始响应，也不把未知字段意外带入页面。
+ */
+export const normalizeProductPlanDetailResponse = (
+  payload: JsonRecord,
+  advertiserId: string,
+  fetchedAt: string,
+): PromotionPlanDetailResult => {
+  const data = asRecord(payload.data)
+  const delivery = asRecord(data.delivery_setting)
+  const products = asArray(data.product_infos).map((item) => ({
+    productId: String(item.product_id ?? ''),
+    channelType: textOrUndefined(item.channel_type),
+    channelId: textOrUndefined(item.channel_id),
+  }))
+  const accounts = asArray(data.aweme_infos).map((item) => ({
+    awemeUid: String(item.aweme_uid ?? ''),
+    awemeName: textOrUndefined(item.aweme_name),
+    uniqueId: textOrUndefined(item.unique_id),
+  }))
+  const rooms = asArray(data.room_info).map((item) => ({
+    anchorId: String(item.anchor_id ?? ''),
+    anchorName: textOrUndefined(item.anchor_name),
+    anchorAvatar: textOrUndefined(item.anchor_avatar),
+  }))
+  const creative = normalizeCreative(data, delivery)
+  const identity = {
+    advertiserId: String(advertiserId),
+    adId: String(data.ad_id ?? ''),
+    awemeId: textOrUndefined(data.aweme_id),
+    name: textOrUndefined(data.name),
+    marketingGoal: textOrUndefined(data.marketing_goal),
+    scene: textOrUndefined(data.adlab_scene),
+    status: textOrUndefined(data.status),
+    optStatus: textOrUndefined(data.opt_status),
+    createTime: textOrUndefined(data.create_time),
+    modifyTime: textOrUndefined(data.modify_time),
+    shopId: textOrUndefined(data.shop_id),
+  }
+  const normalizedDelivery = {
+    externalAction: textOrUndefined(delivery.external_action),
+    smartBidType: textOrUndefined(delivery.smart_bid_type),
+    deepExternalAction: textOrUndefined(delivery.deep_external_action),
+    deepBidType: textOrUndefined(delivery.deep_bid_type),
+    pricingType: textOrUndefined(delivery.pricing_type),
+    roiGoal: finiteOrUndefined(delivery.roi2_goal),
+    budgetMode: textOrUndefined(delivery.budget_mode),
+    // 千川详情预算以元返回；这里保留平台原始数值，不做二次换算。
+    budgetYuan: finiteOrUndefined(delivery.budget),
+    dailyDeliveryHours: finiteOrUndefined(delivery.daily_delivery_hours),
+    scheduleType: textOrUndefined(delivery.video_schedule_type),
+    startTime: textOrUndefined(delivery.start_time),
+    endTime: textOrUndefined(delivery.end_time),
+  }
+  const advanced = {
+    qcpxMode: textOrUndefined(delivery.qcpx_mode),
+    starTaskMaterialSwitch: textOrUndefined(delivery.star_task_material_switch),
+    overallRoiCostItems: Array.isArray(delivery.overall_roi_cost_items)
+      ? delivery.overall_roi_cost_items.map(Number).filter(Number.isFinite)
+      : [],
+    allianceCommissionSwitch: textOrUndefined(
+      delivery.alliance_commision_switch ?? delivery.alliance_commission_switch,
+    ),
+    isMultiAwemeUid: booleanOrUndefined(delivery.is_multi_aweme_uid),
+    noAwemeId: booleanOrUndefined(delivery.no_aweme_id),
+    autoAwemeMaterial: booleanOrUndefined(delivery.auto_aweme_material),
+  }
+  const capabilityReasons: string[] = []
+  const isDeleted = identity.status === 'DELETED'
+  const normalizedBudgetMode = (normalizedDelivery.budgetMode ?? '').trim().toUpperCase()
+  const isRecommendedBudget = /RECOMMEND|SUGGEST|建议/u.test(normalizedBudgetMode)
+  const canUpdateBudget =
+    !isDeleted && !isRecommendedBudget && Boolean(identity.adId && normalizedDelivery.budgetYuan !== undefined)
+  const canUpdateRoi = !isDeleted && Boolean(identity.adId && normalizedDelivery.roiGoal !== undefined)
+  if (isDeleted) capabilityReasons.push('已删除计划不能执行修改。')
+  if (isRecommendedBudget) capabilityReasons.push('建议预算模式需要额外保障参数，当前客户端不提交预算修改。')
+  else if (!canUpdateBudget) capabilityReasons.push('详情未返回可安全修改的预算配置。')
+  if (!canUpdateRoi) capabilityReasons.push('详情未返回可安全修改的 ROI 配置。')
+  const capabilities = {
+    canEnable: !isDeleted,
+    canDisable: !isDeleted,
+    canDelete: !isDeleted,
+    canUpdateBudget,
+    canUpdateRoi,
+    // 名称和时间的正式写接口尚未纳入本轮安全白名单。
+    canUpdateName: false,
+    canUpdateSchedule: false,
+    canUpdateFullConfig: false,
+    reasons: capabilityReasons,
+  }
+  const content = {
+    identity,
+    delivery: normalizedDelivery,
+    products,
+    accounts,
+    rooms,
+    creative,
+    advanced,
+    capabilities,
+  }
+  const contentHash = calculateContentHash(content)
+  const snapshot: PromotionPlanDetailSnapshot = {
+    snapshotId: `${identity.adId}:${fetchedAt}:${contentHash.slice(0, 12)}`,
+    fetchedAt,
+    source: 'OCEANENGINE_OPEN_API',
+    version: 1,
+    contentHash,
+    identity,
+    delivery: normalizedDelivery,
+    products,
+    accounts,
+    rooms,
+    creative,
+    advanced,
+    capabilities,
+  }
+  return {
+    ok: Number(payload.code) === 0,
+    status: Number(payload.code) === 0 ? 'ready' : 'error',
+    message: textOrUndefined(payload.message),
+    platformCode: (payload.code as string | number | null | undefined) ?? null,
+    requestId: textOrUndefined(payload.request_id),
+    snapshot,
+  }
 }

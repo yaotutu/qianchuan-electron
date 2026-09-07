@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import type { PromotionPlanDetailSnapshot, PromotionPlanEditDraft } from '../../../../shared/contracts'
-import { buildPromotionPlanChangePreview, createPromotionPlanEditInitialValues } from '../plan-change-preview'
-import { buildPromotionPlanWritePreflight } from '../plan-write-preflight'
+import {
+  buildPromotionPlanChangePreview,
+  createPromotionPlanEditInitialValues,
+} from '../../../../shared/domain/promotion-plan-change-preview'
+import { buildPromotionPlanWritePreflight } from '../../../../shared/domain/promotion-plan-write-preflight'
 
 const createSnapshot = (overrides: Partial<PromotionPlanDetailSnapshot> = {}): PromotionPlanDetailSnapshot => ({
   snapshotId: 'snapshot-1',

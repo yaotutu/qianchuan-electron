@@ -15,24 +15,28 @@
 - 广告主 / 店铺选择；
 - 商品投放计划列表展示；
 - 本地推广监控任务管理；
-- **计划详情预览与修改草稿**（当前只读，不写平台）。
+- **计划详情标准化、预算 / 支付 ROI 修改预览与受控写入**。
 
 ---
 
 ## 2. 当前状态总览
 
-| 维度 | 状态 |
-|------|------|
-| 分支 | `dev` |
-| Git 工作区 | 干净，无未提交变更 |
-| 类型检查 | ✅ 通过 |
-| 单元测试 | ✅ 13 文件 / 58 测试全部通过 |
-| 构建 | ✅ 通过（renderer + electron + preload） |
-| 真实授权 | ✅ 已跑通 |
-| 真实计划列表 | ✅ 已读到 71 个商品推广计划 |
-| 真实计划详情请求 | ✅ 官方接口返回成功 |
-| 计划详情标准化 | ⚠️ **尚未完成**，详情抽屉目前拿不到 `snapshot` |
-| 计划真实写操作 | ❌ 未接入，仅保留 UI 入口 |
+| 维度                   | 状态                                                     |
+| ---------------------- | -------------------------------------------------------- |
+| 分支                   | `dev`                                                    |
+| Git 工作区             | 有本轮未提交变更，未包含凭据或生成产物                   |
+| 类型检查               | ✅ 通过（renderer + electron）                           |
+| 单元测试               | ✅ 16 文件 / 71 测试全部通过                             |
+| 格式检查               | ✅ 通过                                                  |
+| 构建                   | ✅ 通过（renderer + electron + preload）                 |
+| 真实授权               | ✅ 已跑通                                                |
+| 真实计划列表           | ✅ 已读到 71 个商品推广计划                              |
+| 真实计划详情请求       | ✅ 官方接口返回成功                                      |
+| 计划详情标准化         | ✅ 已完成，详情抽屉接收白名单 `snapshot`                 |
+| 预算 / 支付 ROI 写操作 | ✅ 已接入主进程安全写链路，测试使用 Mock，未发真实写请求 |
+| 监控任务执行           | ✅ 已完成手动检查、规则执行、通知与本地结果落盘          |
+| 工作台 6 个模块        | ✅ 已完成 MVP 页面与路由                                 |
+| 第五项                 | ⏸️ 按用户要求暂缓                                        |
 
 ---
 
@@ -46,14 +50,17 @@ Electron → /oauth/oceanengine/start → 系统浏览器授权
 → 巨量回调 OAuth 服务 → 服务端安全保存 Token
 
 日常业务：
-Electron 主进程 → /oauth/current 获取短期 Access Token
-→ Electron 主进程直接调用巨量 /open_api/...
+Electron 主进程启动或需要恢复授权时
+→ 请求 OAuth 服务端 `/oauth/current`
+→ 服务端读取加密授权，必要时用 Refresh Token 刷新
+→ 只把短期 Access Token 返回给 Electron 主进程内存
+→ Electron 主进程直接调用巨量 `/open_api/...`
 → 最小 IPC 返回脱敏业务数据
 
 Token 失效：
 Electron 检测到明确 Token 失效错误
-→ /oauth/current
-→ 服务端自动刷新
+→ `/oauth/current`
+→ 服务端自动刷新并持久化轮换后的 Token
 → Electron 用新 Token 重试一次
 ```
 
@@ -61,9 +68,11 @@ Electron 检测到明确 Token 失效错误
 
 - `App Secret`、`Refresh Token`、`Cookie`、网页凭据只保存在 OAuth 服务端。
 - `Access Token` 只保存在 Electron **主进程内存**，不写入磁盘、日志、仓库，不传给 Renderer。
+- 应用退出后 Access Token 会自然丢失；下次启动自动请求 `/oauth/current` 恢复，不要求用户重复授权。
+- 只有 Refresh Token 过期、授权撤销或权限变化时，才进入重新授权流程。
 - Renderer 只通过 `contextBridge` 暴露的最小 API 与主进程通信。
 - OAuth 服务端**不代理任何业务接口**，只做授权管家。
-- 千川网页 `/ad/api/...` 属于网页内部接口，不作为产品实现依据。
+- 不实现网页内部接口兼容层；业务请求只允许走巨量官方 `/open_api/...`。
 
 ### 3.3 业务逻辑归属
 
@@ -88,7 +97,7 @@ Electron 检测到明确 Token 失效错误
 │   │   └── monitor-task-service.ts   # 监控任务 CRUD、调度触发
 │   ├── infrastructure/
 │   │   ├── qianchuan-api-client.ts   # 巨量 /open_api/... HTTP 客户端
-│   │   ├── qianchuan-domain.ts       # 计划列表参数解析 + 响应标准化（详情函数待补）
+│   │   ├── qianchuan-domain.ts       # 计划列表参数解析 + 详情白名单标准化
 │   │   ├── oauth-server-client.ts    # OAuth 服务端 HTTP 客户端
 │   │   ├── json-monitor-task-repository.ts
 │   │   └── electron-monitor-notifier.ts
@@ -97,7 +106,12 @@ Electron 检测到明确 Token 失效错误
 ├── src/renderer/
 │   ├── features/
 │   │   ├── auth/                     # 登录页、授权状态门
-│   │   └── promotion-monitor/        # 推广监控：列表、筛选、任务、详情抽屉、修改预览
+│   │   ├── promotion-monitor/        # 推广监控：列表、筛选、任务、详情与修改
+│   │   ├── account-management/       # 账号管理 MVP
+│   │   ├── promotion-management/     # 推广管理 MVP
+│   │   ├── promotion-data/           # 推广数据 MVP
+│   │   ├── multiplier/               # 乘方管理、监控和数据 MVP
+│   │   └── workspace-plans/          # 工作台计划数据模型与复用组件
 │   ├── shared/
 │   │   ├── api/qianchuan-api.ts      # Renderer 调用 preload 的适配层
 │   │   ├── contracts/                # Zod Schema + TypeScript 类型（含详情 Snapshot）
@@ -111,7 +125,6 @@ Electron 检测到明确 Token 失效错误
 ```text
 /Users/yaotutu/Desktop/code/dianxiaoqi-qianchuan/qianchuan-oauth-callback
 ├── src/                              # Bun + Hono
-├── migrations/                       # Token 表结构
 └── README.md                         # 配置与运行说明
 ```
 
@@ -119,70 +132,92 @@ Electron 检测到明确 Token 失效错误
 
 ## 5. 已完成的关键提交
 
-| 提交 | 说明 |
-|------|------|
+| 提交      | 说明                                                                               |
+| --------- | ---------------------------------------------------------------------------------- |
 | `b4a63f2` | Access Token 只存主进程内存；Renderer 不再拿到 Token；Token 失效自动刷新；新增测试 |
-| `8b1e725` | 格式化千川 API Client 模块 |
-| `d19aad5` | 把直接调用巨量 OpenAPI 的数据流沉淀为规则 |
-| `8c79f42` | 客户端直接调用巨量平台 API，不再经过服务端代理 |
-| `1c4b282` | 新增计划详情与修改预览骨架 |
+| `8b1e725` | 格式化千川 API Client 模块                                                         |
+| `d19aad5` | 把直接调用巨量 OpenAPI 的数据流沉淀为规则                                          |
+| `8c79f42` | 客户端直接调用巨量平台 API，不再经过服务端代理                                     |
+| `1c4b282` | 新增计划详情与修改预览骨架                                                         |
 
 ---
 
-## 6. 当前阻塞/待完成项
+## 6. 本轮完成项与后续边界
 
-### 6.1 🔴 最优先：计划详情标准化
+用户本轮要求先完成第一至第四项，第五项暂不处理。当前状态如下。
 
-**问题**：`promotionPlanService.getDetail()` 目前直接返回千川平台原始 Payload：
+### 6.1 ✅ 计划详情标准化
 
-```ts
-// src/main/application/promotion-plan-service.ts
-const getDetail = async ({ advertiserId, adId }: PromotionPlanDetailInput) => {
-  // ...
-  return requestWithAccessTokenRefresh((accessToken) =>
-    apiClient.request(url, accessToken, '获取计划详情')
-  )
-}
+已在 `src/main/infrastructure/qianchuan-domain.ts` 增加详情响应标准化，将巨量平台原始响应裁剪为 Renderer 可安全消费的白名单 `PromotionPlanDetailSnapshot`，并由主进程完成：
+
+- 计划身份、投放配置、商品、账号、直播间、素材和高级配置聚合；
+- 平台 ID 统一转换为字符串；
+- `request_id` 标准化为 `requestId`；
+- 使用稳定排序序列化后的业务配置生成 SHA-256 `contentHash`；
+- `snapshotId` 只由计划 ID、抓取时间和 Hash 前缀组成；
+- 未知平台字段不进入 Renderer；
+- `fetchedAt` 与 `snapshotId` 不参与内容 Hash，避免同一配置因抓取时间变化而产生冲突。
+
+`getDetail()` 现在返回标准化结果，详情抽屉可以展示真实字段和素材摘要。
+
+### 6.2 ✅ 预算 / 支付 ROI 真实写操作
+
+当前只开放以下两个官方增量接口：
+
+```text
+POST /open_api/v1.0/qianchuan/uni_promotion/ad/budget/update/
+POST /open_api/v1.0/qianchuan/uni_promotion/ad/roi2_goal/update/
 ```
 
-但 Renderer 的 `PromotionPlanDetailDrawer.tsx` 期望收到：
+主进程写入流程固定为：
 
-```ts
-{
-  ok: true,
-  requestId: string,
-  snapshot: PromotionPlanDetailSnapshot
-}
+```text
+重读最新详情
+→ 校验广告主 / 计划归属、删除状态和 baseContentHash
+→ 基于最新 Snapshot 重新生成白名单命令
+→ 校验用户二次确认
+→ 按需调用预算 / ROI 官方接口
+→ 写后重新读取详情
 ```
 
-因此当前“查看详情”接口请求成功，但详情抽屉无法展示内容。
+已实现的安全边界：
 
-**建议下一步**：
+- Renderer 只能提交草稿和 `confirmed: true`，不能指定 endpoint 或平台载荷；
+- 建议预算模式、未支持字段、超出 JavaScript 安全整数范围的 ID 均 fail-closed；
+- Token 失效只允许通过 `/oauth/current?force_refresh=true` 刷新并重试一次；
+- 两个官方请求不是事务，部分成功会返回 `partial_updated`，并提示刷新详情核对；
+- 测试全部使用 Mock，尚未执行真实平台写请求。
 
-1. 在 `src/main/infrastructure/qianchuan-domain.ts` 中新增：
-   ```ts
-   normalizeProductPlanDetailResponse(
-     payload,
-     advertiserId,
-     fetchedAt,
-   ): PromotionPlanDetailResult
-   ```
-2. 实现 `contentHash`：使用 `crypto.createHash('sha256')`，对业务配置做稳定排序后序列化，不包含 `fetchedAt` / `snapshotId`。
-3. 实现 `snapshotId`：`adId + fetchedAt + contentHash 前缀` 或其他主进程可测试生成方式。
-4. 把 `getDetail()` 改为返回 `normalizeProductPlanDetailResponse(...)` 的结果。
-5. 补测试：真实结构标准化、素材数量聚合、Hash 稳定性、Hash 变更敏感性、`request_id → requestId`、未知字段不进入 Renderer。
+名称、投放时间、启停、删除、复制等写操作仍保持关闭。
 
-### 6.2 🟡 计划真实写操作
+### 6.3 ✅ 监控任务执行能力
 
-- 修改预览 UI（`PromotionPlanEditPreview.tsx`）已存在。
-- `promotionPlanFieldChangeSchema`、`promotionPlanEditDraftSchema` 已定义。
-- 尚未调用任何巨量写接口，当前保持“只读 + 草稿”状态。
-- 接入写接口前必须先重新读取详情并比对 `baseContentHash`。
+已完善 `runOnce()` 的执行结果统计和页面反馈，支持：
 
-### 6.3 🟡 监控任务执行
+- 读取目标计划当日只读数据；
+- 执行本地规则并计算正常、触发、错误、数据缺失数量；
+- 将任务最后结果写回本地仓库；
+- 仅在状态从非 `TRIGGERED` 进入 `TRIGGERED` 时发送通知；
+- 不自动启停、修改或删除真实千川计划。
 
-- 监控任务 CRUD、调度器、本地通知已存在。
-- 当前监控只做**通知、状态计算和执行记录**，不自动操作真实千川计划。
+### 6.4 ✅ 工作台 6 个占位模块 MVP
+
+以下路由已从统一占位页替换为可用 MVP 页面：
+
+```text
+/account-management
+/promotion-management
+/promotion-data
+/multiplier-management
+/multiplier-monitor
+/multiplier-data
+```
+
+页面复用现有计划列表、详情和本地监控数据能力，提供账号信息、计划管理入口、数据汇总、全域计划候选和监控概览；未知乘方写接口暂不猜测，也不调用。
+
+### 6.5 ⏸️ 第五项
+
+第五项按用户要求暂不实现，后续需要用户重新确认范围后再开始。
 
 ---
 
@@ -228,7 +263,8 @@ npm run build
 
 ## 8. 测试覆盖
 
-- 13 个测试文件，58 个测试用例全部通过。
+- 16 个测试文件，73 个测试用例全部通过。
+- 已通过：`npm run typecheck`、`npm test`、`npm run format:check`、`npm run build`。
 - 重点覆盖：
   - OAuth 客户端与 Token 刷新（含 Renderer 不拿到 Token）
   - 计划列表标准化
@@ -236,7 +272,7 @@ npm run build
   - 监控任务仓库与调度器
   - 计划变更预览逻辑
 
-**详情标准化完成后需补充的测试**：见 6.1。
+详情标准化、写入安全边界、监控执行统计和工作台计划模型的测试均已纳入上述测试结果。OAuth 服务端当前通过 20 个集成测试，并通过 Biome 检查。
 
 ---
 
@@ -244,8 +280,8 @@ npm run build
 
 - **中文沟通**；JS/TS 优先函数式编程；关键逻辑加详细中文注释。
 - Renderer 不得接触 Token、Cookie、`auth_code`、完整请求头。
-- 只使用官方 `/open_api/...`，不使用网页 `/ad/api/...`。
-- 当前不执行任何真实计划写操作，除非用户明确要求并确认安全方案。
+- 业务请求只使用官方 `/open_api/...`；不保留网页 `/ad/api/...` 兼容层。
+- 预算 / 支付 ROI 的代码路径已接入，但测试和当前开发验证不执行真实平台写请求；如需真实写入，必须由用户明确要求并确认具体计划、字段和安全方案。
 - 不确定的官方接口字段必须查官方开发手册，不猜测。
 - 不提交 `/tmp/qianchuan-plan-detail.json` 或任何含凭据的抓包文件。
 - 不回退用户已有改动。
@@ -265,11 +301,11 @@ npm run build
 
 ## 11. 下一任接手建议
 
-1. **先完成 6.1 的详情标准化**，这是当前最显式的缺口。
-2. 完成后再跑一次真实只读验证，确认详情抽屉能正常展示。
-3. 如果用户确认要写操作，按“读取详情 → 对比 baseContentHash → 调用官方更新接口 → 记录日志”的顺序接入，先做一个字段（如预算）试点。
-4. 任何接口字段不确定时，优先查看巨量千川官方开发手册，不要根据网页内部接口反推。
+1. 继续保持预算 / 支付 ROI 写操作的 fail-closed 边界；如需扩大写入字段，先核对官方开放平台文档并补齐契约、预检、Mock 和写后回读测试。
+2. 需要真实验证时，仅先做只读详情和页面交互验证；真实写请求必须由用户明确确认具体计划、字段和安全方案。
+3. 关注 Renderer 与主进程 IPC 契约变更，确保 preload、类型声明、Zod 校验和测试同步更新。
+4. 第五项暂缓，不要在未重新确认范围前实现。
 
 ---
 
-*文档由 Codex 于 2026-09-07 根据当前仓库状态生成。*
+_文档由 Codex 于 2026-09-07 根据当前仓库状态生成。_

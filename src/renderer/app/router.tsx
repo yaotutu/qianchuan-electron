@@ -1,19 +1,26 @@
-import { Navigate, Route, Routes, useNavigate } from 'react-router-dom'
-import type { AdvertiserAccount } from '../../shared/contracts'
-import { FeaturePlaceholder } from '../features/placeholder/FeaturePlaceholder'
+import { Navigate, Route, Routes } from 'react-router-dom'
+import type { AdvertiserAccount, AuthorizationResult } from '../../shared/contracts'
 import { PromotionMonitorPage } from '../features/promotion-monitor/PromotionMonitorPage'
+import { AccountManagementPage } from '../features/account-management/AccountManagementPage'
+import { PromotionManagementPage } from '../features/promotion-management/PromotionManagementPage'
+import { PromotionDataPage } from '../features/promotion-data/PromotionDataPage'
+import {
+  MultiplierManagementPage,
+  MultiplierMonitorPage,
+  MultiplierDataPage,
+} from '../features/multiplier/MultiplierPages'
 
 type WorkspaceRoutesProps = {
   accounts: AdvertiserAccount[]
   currentAccountId: string
+  authorization: AuthorizationResult
 }
 
 /**
  * 工作台业务路由集中管理。
  * HashRouter 适合 Electron file:// 页面，不依赖本地服务器回退配置。
  */
-export const WorkspaceRoutes = ({ accounts, currentAccountId }: WorkspaceRoutesProps) => {
-  const navigate = useNavigate()
+export const WorkspaceRoutes = ({ accounts, currentAccountId, authorization }: WorkspaceRoutesProps) => {
   return (
     <Routes>
       <Route path="/" element={<Navigate to="/promotion-monitor" replace />} />
@@ -21,20 +28,21 @@ export const WorkspaceRoutes = ({ accounts, currentAccountId }: WorkspaceRoutesP
         path="/promotion-monitor"
         element={<PromotionMonitorPage currentAccountId={currentAccountId} accounts={accounts} />}
       />
-      {Object.keys({
-        'account-management': true,
-        'promotion-management': true,
-        'promotion-data': true,
-        'multiplier-management': true,
-        'multiplier-monitor': true,
-        'multiplier-data': true,
-      }).map((view) => (
-        <Route
-          key={view}
-          path={`/${view}`}
-          element={<FeaturePlaceholder view={view} onBack={() => navigate('/promotion-monitor')} />}
-        />
-      ))}
+      <Route
+        path="/account-management"
+        element={<AccountManagementPage accounts={accounts} authorization={authorization} />}
+      />
+      <Route
+        path="/promotion-management"
+        element={<PromotionManagementPage currentAccountId={currentAccountId} accounts={accounts} />}
+      />
+      <Route path="/promotion-data" element={<PromotionDataPage currentAccountId={currentAccountId} />} />
+      <Route path="/multiplier-management" element={<MultiplierManagementPage currentAccountId={currentAccountId} />} />
+      <Route
+        path="/multiplier-monitor"
+        element={<MultiplierMonitorPage currentAccountId={currentAccountId} accounts={accounts} />}
+      />
+      <Route path="/multiplier-data" element={<MultiplierDataPage currentAccountId={currentAccountId} />} />
       <Route path="*" element={<Navigate to="/promotion-monitor" replace />} />
     </Routes>
   )

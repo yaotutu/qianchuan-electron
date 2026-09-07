@@ -5,8 +5,8 @@ import {
   type PromotionPlanFieldChange,
   type PromotionPlanWriteCommand,
   type PromotionPlanWritePreflight,
-} from '../../../shared/contracts'
-import { buildPromotionPlanChangePreview } from './plan-change-preview'
+} from '../contracts'
+import { buildPromotionPlanChangePreview } from './promotion-plan-change-preview'
 
 const BUDGET_ENDPOINT = '/open_api/v1.0/qianchuan/uni_promotion/ad/budget/update/' as const
 const ROI_ENDPOINT = '/open_api/v1.0/qianchuan/uni_promotion/ad/roi2_goal/update/' as const

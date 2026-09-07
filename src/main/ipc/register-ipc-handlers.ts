@@ -20,6 +20,7 @@ import {
   type PromotionPlanDetailInput,
   type PromotionPlanFilters,
 } from '../../shared/contracts/promotion-plan'
+import { promotionPlanWriteInputSchema } from '../../shared/contracts/promotion-plan-write'
 import type { AuthService } from '../application/auth-service'
 import type { MonitorTaskService } from '../application/monitor-task-service'
 import type { PromotionPlanService } from '../application/promotion-plan-service'
@@ -44,8 +45,8 @@ export const registerIpcHandlers = ({
   monitorTaskService,
 }: RegisterIpcHandlersDependencies) => {
   const handle =
-    <T>(callback: (...args: any[]) => Promise<T>) =>
-    async (...args: any[]) => {
+    <T>(callback: (...args: unknown[]) => Promise<T>) =>
+    async (...args: unknown[]) => {
       try {
         return await callback(...args)
       } catch (error) {
@@ -82,6 +83,10 @@ export const registerIpcHandlers = ({
     handle((_event, input: unknown) =>
       promotionPlanService.getDetail(promotionPlanDetailInputSchema.parse(input) as PromotionPlanDetailInput),
     ),
+  )
+  ipcMain.handle(
+    IPC_CHANNELS.promotionPlan.update,
+    handle((_event, input: unknown) => promotionPlanService.update(promotionPlanWriteInputSchema.parse(input))),
   )
   ipcMain.handle(
     IPC_CHANNELS.monitorTask.list,

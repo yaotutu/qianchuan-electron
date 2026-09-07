@@ -6,15 +6,22 @@ import {
   Form,
   Input,
   InputNumber,
+  Modal,
   Space,
   Tag,
   Typography,
 } from '@arco-design/web-react'
 import { useEffect, useMemo, useState } from 'react'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { qianchuanApi } from '../../../shared/api/qianchuan-api'
+import { showErrorFeedback, showSuccessFeedback } from '../../../shared/ui/feedback'
 import type { PromotionPlanDetailSnapshot, PromotionPlanEditChanges } from '../../../../shared/contracts'
 import { promotionPlanEditDraftSchema } from '../../../../shared/contracts'
-import { buildPromotionPlanChangePreview, createPromotionPlanEditInitialValues } from '../plan-change-preview'
-import { buildPromotionPlanWritePreflight } from '../plan-write-preflight'
+import {
+  buildPromotionPlanChangePreview,
+  createPromotionPlanEditInitialValues,
+} from '../../../../shared/domain/promotion-plan-change-preview'
+import { buildPromotionPlanWritePreflight } from '../../../../shared/domain/promotion-plan-write-preflight'
 
 const { Text } = Typography
 
@@ -29,14 +36,45 @@ const formatPreviewValue = (field: string, value: string | number | undefined) =
 }
 
 /**
- * 该组件是“写操作接入前”的本地沙盘：用户可以编辑受控字段并查看差异与能力判断，
- * 但组件没有提交回调、没有 IPC，也不会持久化草稿，从结构上杜绝误触真实千川写接口。
+ * 该组件负责受控字段编辑、差异预览和真实提交确认。提交仍必须经过：
+ * 1）Renderer Schema 校验；2）用户勾选二次确认；3）主进程重读详情并比对 Hash；
+ * 4）主进程按最新快照重新生成白名单命令；5）写后回读确认。
  */
 export const PromotionPlanEditPreview = ({ snapshot }: PromotionPlanEditPreviewProps) => {
   const [expanded, setExpanded] = useState(false)
   const [changes, setChanges] = useState<PromotionPlanEditChanges>(() => createPromotionPlanEditInitialValues(snapshot))
   const [showPreview, setShowPreview] = useState(false)
   const [confirmed, setConfirmed] = useState(false)
+  const queryClient = useQueryClient()
+  const updateMutation = useMutation({
+    mutationFn: () => {
+      if (!draftResult.success || !preflight?.valid) throw new Error('当前修改未通过安全校验。')
+      return qianchuanApi.updatePromotionPlan({ draft: draftResult.data, confirmed: true })
+    },
+    onSuccess: async (result) => {
+      if (!result.ok) {
+        // 预算与 ROI 是两个独立的官方增量请求；部分成功时不能把它展示成普通失败，
+        // 需要主动刷新详情并提醒用户核对平台最终值，避免基于旧快照继续编辑。
+        if (result.status === 'partial_updated') {
+          await queryClient.invalidateQueries({
+            queryKey: ['promotion-plan-detail', snapshot.identity.advertiserId, snapshot.identity.adId],
+          })
+          setConfirmed(false)
+          showErrorFeedback(result.message || '部分修改可能已经生效，请刷新详情核对预算和支付 ROI。')
+          return
+        }
+        showErrorFeedback(result.message || '平台未接受本次修改。')
+        return
+      }
+      await queryClient.invalidateQueries({
+        queryKey: ['promotion-plan-detail', snapshot.identity.advertiserId, snapshot.identity.adId],
+      })
+      setConfirmed(false)
+      setShowPreview(false)
+      showSuccessFeedback(result.message || '计划修改已完成。')
+    },
+    onError: (error) => showErrorFeedback(error instanceof Error ? error.message : '提交计划修改失败。'),
+  })
 
   useEffect(() => {
     setExpanded(false)
@@ -96,7 +134,7 @@ export const PromotionPlanEditPreview = ({ snapshot }: PromotionPlanEditPreviewP
 
   return (
     <div className="plan-edit-preview">
-      <Alert type="warning" content="本页面只生成本地差异预览，不会向千川提交、保存或执行任何修改。" />
+      <Alert type="warning" content="预算与支付 ROI 会在确认后提交到巨量官方接口；名称与投放时间仍只做本地预览。" />
       <Form layout="vertical" className="plan-edit-form">
         <Form.Item label="计划名称">
           <Input
@@ -230,16 +268,32 @@ export const PromotionPlanEditPreview = ({ snapshot }: PromotionPlanEditPreviewP
                   <Checkbox checked={confirmed} onChange={setConfirmed}>
                     我已核对广告主、计划和目标值，并理解真实提交前还会重新读取最新快照。
                   </Checkbox>
-                  <Text type="secondary">这是二次确认界面预演；当前版本不会发送任何写请求。</Text>
+                  <Text type="secondary">
+                    提交后会调用巨量官方预算 / ROI 接口；主进程会重读快照并在冲突时阻止提交。
+                  </Text>
                 </div>
               )}
             </>
           )}
           <div className="plan-edit-submit-placeholder">
-            <Button disabled type="primary">
-              {confirmed ? '提交修改（接口未接通）' : '提交修改（尚未开放）'}
+            <Button
+              type="primary"
+              loading={updateMutation.isPending}
+              disabled={!confirmed || !preflight?.valid}
+              onClick={() => {
+                Modal.confirm({
+                  title: '确认提交千川计划修改？',
+                  content:
+                    '提交后将直接调用巨量官方接口修改真实计划。系统会先校验最新快照，若配置发生变化将自动阻止提交。',
+                  okText: '确认提交',
+                  cancelText: '取消',
+                  onOk: () => updateMutation.mutate(),
+                })
+              }}
+            >
+              {updateMutation.isPending ? '正在提交…' : '提交真实修改'}
             </Button>
-            <Text type="secondary">真实执行入口尚未接入，按钮始终禁用。</Text>
+            <Text type="secondary">仅支持预算和支付 ROI；名称、投放时间仍保持阻断。</Text>
           </div>
         </div>
       )}

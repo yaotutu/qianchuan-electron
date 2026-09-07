@@ -1,5 +1,7 @@
 import { z } from 'zod'
 
+import { promotionPlanDetailSnapshotSchema, promotionPlanEditDraftSchema } from './promotion-plan'
+
 /**
  * 当前只允许把已核实的专项增量写接口纳入提交准备层。
  * 名称、投放时间和计划状态等能力即使在 UI 中有草稿字段，也不能凭网页内部接口生成正式命令。
@@ -77,3 +79,34 @@ export type UpdateBudgetPayload = z.infer<typeof updateBudgetPayloadSchema>
 export type UpdateRoiPayload = z.infer<typeof updateRoiPayloadSchema>
 export type PromotionPlanWriteCommand = z.infer<typeof promotionPlanWriteCommandSchema>
 export type PromotionPlanWritePreflight = z.infer<typeof promotionPlanWritePreflightSchema>
+
+/** Renderer 只提交草稿和明确的二次确认，不允许自行指定接口地址或最终请求载荷。 */
+export const promotionPlanWriteInputSchema = z
+  .object({
+    draft: promotionPlanEditDraftSchema,
+    confirmed: z.literal(true),
+  })
+  .strip()
+
+const promotionPlanWriteStepResultSchema = z
+  .object({
+    operation: promotionPlanWriteOperationSchema,
+    ok: z.boolean(),
+    requestId: z.string().optional(),
+    message: z.string().optional(),
+  })
+  .strip()
+
+export const promotionPlanWriteResultSchema = z
+  .object({
+    ok: z.boolean().optional().default(false),
+    status: z.string().optional(),
+    message: z.string().optional(),
+    steps: z.array(promotionPlanWriteStepResultSchema).optional().default([]),
+    snapshot: promotionPlanDetailSnapshotSchema.optional(),
+  })
+  .strip()
+
+export type PromotionPlanWriteInput = z.infer<typeof promotionPlanWriteInputSchema>
+export type PromotionPlanWriteStepResult = z.infer<typeof promotionPlanWriteStepResultSchema>
+export type PromotionPlanWriteResult = z.infer<typeof promotionPlanWriteResultSchema>
