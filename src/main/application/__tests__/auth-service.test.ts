@@ -36,6 +36,67 @@ describe('授权应用服务', () => {
     expect(openExternal).toHaveBeenCalledWith('https://example.com/oauth')
   })
 
+  it('当前授权只返回 Renderer 需要的字段，Token 原文留在主进程缓存', async () => {
+    const client = createClient(async (pathname) => {
+      if (pathname === '/oauth/current') {
+        return {
+          ok: true,
+          status: 'success',
+          user: { displayName: '测试用户' },
+          token: {
+            accessToken: 'main-process-access-token',
+            refreshToken: 'server-refresh-token',
+            accessTokenExpiresAt: '2026-09-07T01:46:07.678Z',
+            refreshTokenExpiresAt: '2026-10-06T01:46:07.678Z',
+            advertiserIds: ['186001'],
+            advertiserAccounts: [{ advertiserId: '186001', advertiserName: '知足好物集' }],
+          },
+        }
+      }
+      return { version: '1.0.0', configured: true, capabilities: ['oauth-attempt-result', 'current-authorization'] }
+    })
+    const service = createAuthService({ client, openExternal: async () => undefined })
+
+    const result = await service.getCurrentAuthorization()
+
+    expect(result.token).not.toHaveProperty('accessToken')
+    expect(result.token).not.toHaveProperty('refreshToken')
+    if (result.token) {
+      expect(result.token.accessTokenExpiresAt).toBe('2026-09-07T01:46:07.678Z')
+      expect(result.token.advertiserIds).toEqual(['186001'])
+      expect(result.token.advertiserAccounts).toEqual([{ advertiserId: '186001', advertiserName: '知足好物集' }])
+    }
+    expect(service.getAccessToken()).toBe('main-process-access-token')
+    expect(service.getAdvertiserIds()).toEqual(['186001'])
+  })
+
+  it('服务端返回无效授权时也不会向 Renderer 泄露 Refresh Token', async () => {
+    const client = createClient(async (pathname) => {
+      if (pathname === '/oauth/current') {
+        return {
+          ok: true,
+          status: 'success',
+          token: {
+            refreshToken: 'server-refresh-token',
+            accessTokenExpiresAt: '2026-09-07T01:46:07.678Z',
+            advertiserIds: ['186001'],
+          },
+        }
+      }
+      return { version: '1.0.0', configured: true, capabilities: ['oauth-attempt-result', 'current-authorization'] }
+    })
+    const service = createAuthService({ client, openExternal: async () => undefined })
+
+    const result = await service.getCurrentAuthorization()
+
+    expect(result.token).not.toHaveProperty('refreshToken')
+    if (result.token) {
+      expect(result.token.accessTokenExpiresAt).toBe('2026-09-07T01:46:07.678Z')
+      expect(result.token.advertiserIds).toEqual(['186001'])
+    }
+    expect(service.getAccessToken()).toBeNull()
+  })
+
   it('把失效授权与服务端能力不完整转换成稳定客户端状态', async () => {
     const client = createClient(async (pathname) => {
       if (pathname === '/oauth/current') {

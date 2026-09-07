@@ -86,3 +86,23 @@ it('修改草稿只保留声明字段，并校验快照内容摘要', async () =
   expect(result).not.toHaveProperty('unsafe')
   expect(() => promotionPlanEditDraftSchema.parse({ ...result, baseContentHash: 'bad' })).toThrow()
 })
+
+describe('授权契约', () => {
+  it('Renderer 契约会剥离 Token 原文，只保留可展示字段', () => {
+    const result = authorizationSchema.parse({
+      ok: true,
+      status: 'success',
+      token: {
+        accessToken: 'access-token',
+        refreshToken: 'refresh-token',
+        accessTokenExpiresAt: '2026-09-07T01:46:07.678Z',
+        advertiserIds: ['186001'],
+      },
+    })
+
+    expect(result.token).not.toHaveProperty('accessToken')
+    expect(result.token).not.toHaveProperty('refreshToken')
+    expect(result.token?.accessTokenExpiresAt).toBe('2026-09-07T01:46:07.678Z')
+    expect(result.token?.advertiserIds).toEqual(['186001'])
+  })
+})

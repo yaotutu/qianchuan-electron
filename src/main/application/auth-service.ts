@@ -1,4 +1,4 @@
-import { getRequestErrorDetails, type OAuthServerClient } from '../infrastructure/oauth-server-client'
+import { getRequestErrorDetails, type JsonRecord, type OAuthServerClient } from '../infrastructure/oauth-server-client'
 
 type AuthServiceDependencies = {
   client: OAuthServerClient
@@ -45,12 +45,41 @@ export const createAuthService = ({ client, openExternal, now = () => new Date()
     }
   }
 
+  /** 授权结果里的 Token 形状；仅主进程内部读取，不作为公开类型导出。 */
+  type AuthorizationToken = {
+    accessToken?: string
+    refreshToken?: string
+    accessTokenExpiresAt?: string
+    refreshTokenExpiresAt?: string
+    advertiserIds?: string[]
+    advertiserAccounts?: unknown
+  }
+
+  /** 裁剪任意授权结果中的 Token 原文；OAuth 轮询和当前授权都必须经过这里。 */
+  const stripTokenSecrets = (result: JsonRecord) => {
+    const { token, ...safeResult } = result
+    const authorizationToken = token as AuthorizationToken | undefined
+    if (!authorizationToken) return safeResult
+
+    return {
+      ...safeResult,
+      token: {
+        accessTokenExpiresAt: authorizationToken.accessTokenExpiresAt,
+        refreshTokenExpiresAt: authorizationToken.refreshTokenExpiresAt,
+        advertiserIds: Array.isArray(authorizationToken.advertiserIds)
+          ? authorizationToken.advertiserIds.map(String)
+          : [],
+        advertiserAccounts: authorizationToken.advertiserAccounts,
+      },
+    }
+  }
+
   const getLoginStatus = async () => {
     if (!activeAttemptId) return { ok: true, status: 'idle', message: '还没有发起本次授权。' }
     try {
       const result = await client.request(`/oauth/result?attempt_id=${encodeURIComponent(activeAttemptId)}`)
       if (result.status !== 'waiting') clearActiveAttempt()
-      return result
+      return stripTokenSecrets(result)
     } catch (error) {
       if (getRequestErrorDetails(error).status === 404) {
         clearActiveAttempt()
@@ -60,22 +89,43 @@ export const createAuthService = ({ client, openExternal, now = () => new Date()
     }
   }
 
+  /**
+   * 主进程内部使用的授权载荷。
+   * Access Token / Refresh Token 只停留在这个函数和本地缓存中，
+   * 返回 Renderer 前会被裁剪为非敏感字段。
+   */
+  const readAuthorization = async () => {
+    const result = await client.request('/oauth/current')
+    const token = result.token as AuthorizationToken | undefined
+
+    if (token?.accessToken) {
+      cachedAccessToken = token.accessToken
+      cachedAdvertiserIds = Array.isArray(token.advertiserIds) ? token.advertiserIds.map(String) : []
+    } else {
+      // 授权被撤销或尚未建立时必须清空旧缓存，避免继续使用已作废的本地凭证。
+      cachedAccessToken = null
+      cachedAdvertiserIds = []
+    }
+
+    // 无论服务端是否有有效 Access Token，都不能把 Token 原文传给 Renderer。
+    return stripTokenSecrets(result)
+  }
+
+  /** Renderer 使用的当前授权状态；这里保证不会返回 Token 原文。 */
   const getCurrentAuthorization = async () => {
     try {
-      const result = await client.request('/oauth/current')
-
-      // 缓存 Access Token 和广告主列表，供 promotion-plan-service 直接调巨量 API
-      const token = result.token as { accessToken?: string; advertiserIds?: string[] } | undefined
-      if (token?.accessToken) {
-        cachedAccessToken = token.accessToken
-        cachedAdvertiserIds = Array.isArray(token.advertiserIds) ? token.advertiserIds.map(String) : []
-      }
-
-      return result
+      return await readAuthorization()
     } catch (error) {
       const details = getRequestErrorDetails(error)
-      if (details.status === 404) return { ok: true, status: 'idle', message: '当前还没有完成授权。' }
+      if (details.status === 404) {
+        cachedAccessToken = null
+        cachedAdvertiserIds = []
+        return { ok: true, status: 'idle', message: '当前还没有完成授权。' }
+      }
       if (details.status === 401) {
+        // 401 表示 Refresh Token 不可恢复，需要清理主进程缓存并引导用户重新授权。
+        cachedAccessToken = null
+        cachedAdvertiserIds = []
         const requiresLogin = details.payload?.status === 'reauthorization_required'
         return {
           ok: false,
@@ -85,6 +135,15 @@ export const createAuthService = ({ client, openExternal, now = () => new Date()
       }
       throw error
     }
+  }
+
+  /**
+   * 供业务 API 客户端触发安全刷新。
+   * 每次 OpenAPI 请求返回 Token 失效错误时最多调用一次，避免无限重试。
+   */
+  const refreshAccessToken = async () => {
+    await getCurrentAuthorization()
+    return cachedAccessToken
   }
 
   const getHealth = async () => {
@@ -112,6 +171,8 @@ export const createAuthService = ({ client, openExternal, now = () => new Date()
     getAccessToken: () => cachedAccessToken,
     /** 返回当前授权的广告主 ID 列表，用于越权检查。 */
     getAdvertiserIds: () => cachedAdvertiserIds,
+    /** 触发服务端自动刷新，并返回新的短期 Access Token。 */
+    refreshAccessToken,
   }
 }
 

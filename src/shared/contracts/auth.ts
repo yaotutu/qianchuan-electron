@@ -34,17 +34,15 @@ export const authorizationSchema = z
       })
       .passthrough()
       .optional(),
+    // Renderer 只允许拿到账户和到期信息；Access Token / Refresh Token
+    // 停留在 Electron 主进程内存中，绝不能通过 IPC 返回。
     token: z
       .object({
-        // Access Token 直接返回，供主进程直接调用巨量平台 API
-        accessToken: z.string().optional(),
-        refreshToken: z.string().optional(),
         accessTokenExpiresAt: z.string().optional(),
         refreshTokenExpiresAt: z.string().optional(),
         advertiserIds: z.array(z.union([z.string(), z.number()]).transform(String)).optional(),
         advertiserAccounts: z.array(advertiserAccountSchema).optional(),
       })
-      .passthrough()
       .optional(),
   })
   .passthrough()

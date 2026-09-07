@@ -12,7 +12,7 @@
 import type { PromotionPlanDetailInput, PromotionPlanFilters } from '../../shared/contracts/promotion-plan'
 import type { MonitorPlanSnapshot } from '../monitor-scheduler'
 import type { JsonRecord } from '../infrastructure/oauth-server-client'
-import type { QianchuanApiClient } from '../infrastructure/qianchuan-api-client'
+import { QianchuanApiError, type QianchuanApiClient } from '../infrastructure/qianchuan-api-client'
 import {
   buildProductPlanDetailUrl,
   buildProductPlanListUrl,
@@ -24,11 +24,27 @@ import {
 
 type PromotionPlanQuery = Partial<PromotionPlanFilters>
 
-/** Token 提供者：返回当前有效的 Access Token 和授权广告主列表。 */
+/**
+ * Token 提供者：返回当前有效的 Access Token 和授权广告主列表，
+ * 并在平台判断 Token 失效时触发服务端 refresh。
+ */
 export interface TokenProvider {
   getAccessToken: () => string | null
   getAdvertiserIds: () => string[]
+  refreshAccessToken: () => Promise<string | null>
 }
+
+/**
+ * 平台 Access Token 失效的稳定错误码。
+ * 这里采用白名单而不是“所有错误都重试”，避免把业务失败误当成鉴权失败。
+ */
+const TOKEN_INVALID_PLATFORM_CODES = new Set(['40105'])
+
+/** 仅识别明确的 Access Token 失效错误，控制重试范围。 */
+const isAccessTokenInvalidError = (error: unknown) =>
+  error instanceof QianchuanApiError &&
+  (TOKEN_INVALID_PLATFORM_CODES.has(String(error.platformCode ?? '')) ||
+    /access token (?:is )?invalid/i.test(error.platformMessage ?? ''))
 
 const asJsonRecord = (value: unknown): JsonRecord =>
   value && typeof value === 'object' && !Array.isArray(value) ? (value as JsonRecord) : {}
@@ -99,26 +115,50 @@ export interface PromotionPlanServiceDeps {
 }
 
 export const createPromotionPlanService = ({ apiClient, tokenProvider }: PromotionPlanServiceDeps) => {
-  const list = async (filters: PromotionPlanQuery = {}) => {
+  /**
+   * 统一执行 OpenAPI 请求，并在明确的 Token 失效错误上做一次有界刷新。
+   * 只刷新一次可以防止平台持续报鉴权错误时形成无限重试。
+   */
+  const requestWithAccessTokenRefresh = async <T>(run: (accessToken: string) => Promise<T>): Promise<T> => {
     const accessToken = tokenProvider.getAccessToken()
     if (!accessToken) throw new Error('当前未登录，请先完成巨量千川授权。')
 
+    try {
+      return await run(accessToken)
+    } catch (error) {
+      if (!isAccessTokenInvalidError(error)) throw error
+
+      const refreshedAccessToken = await tokenProvider.refreshAccessToken()
+      if (!refreshedAccessToken || refreshedAccessToken === accessToken) throw error
+
+      return run(refreshedAccessToken)
+    }
+  }
+
+  /** 先检查登录态，再执行参数校验，让用户优先看到“未登录”而非派生错误。 */
+  const requireAccessToken = () => {
+    const accessToken = tokenProvider.getAccessToken()
+    if (!accessToken) throw new Error('当前未登录，请先完成巨量千川授权。')
+    return accessToken
+  }
+
+  const list = async (filters: PromotionPlanQuery = {}) => {
+    requireAccessToken()
     const advertiserIds = tokenProvider.getAdvertiserIds()
     const query = parseProductPlanQuery(filtersToParams(filters), advertiserIds)
     const url = buildProductPlanListUrl(query)
-    const payload = await apiClient.request(url, accessToken, '获取商品投放计划')
+    const payload = await requestWithAccessTokenRefresh((accessToken) =>
+      apiClient.request(url, accessToken, '获取商品投放计划'),
+    )
     return normalizeProductPlanResponse(payload as Record<string, unknown>, query)
   }
 
   const getDetail = async ({ advertiserId, adId }: PromotionPlanDetailInput) => {
-    const accessToken = tokenProvider.getAccessToken()
-    if (!accessToken) throw new Error('当前未登录，请先完成巨量千川授权。')
-
+    requireAccessToken()
     const advertiserIds = tokenProvider.getAdvertiserIds()
     const query = parseProductPlanDetailQuery(advertiserId, adId, advertiserIds)
     const url = buildProductPlanDetailUrl(query)
-    const payload = await apiClient.request(url, accessToken, '获取计划详情')
-    return payload
+    return requestWithAccessTokenRefresh((accessToken) => apiClient.request(url, accessToken, '获取计划详情'))
   }
 
   /** 调度器按广告主批量读取计划，并在找到所有目标计划后提前停止翻页。 */
