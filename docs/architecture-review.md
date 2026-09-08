@@ -111,13 +111,21 @@ HTTP Routes
 
 ### P0-2 Application 层直接依赖 Infrastructure 具体实现
 
-当前存在以下典型依赖：
+评审时发现的典型依赖包括：
 
 - `auth-service.ts` 直接 import `oauth-server-client` 的 `JsonRecord`、错误解析函数和客户端类型；
 - `promotion-plan-service.ts` 直接 import `qianchuan-api-client` 的错误类型和客户端类型；
 - `promotion-plan-service.ts` 直接 import `qianchuan-domain.ts` 的平台 URL、查询解析和响应标准化；
 - `monitor-task-service.ts` 直接依赖具体的 `MonitorTaskStore` 和 `MonitorScheduler` 类型；
 - `MonitorPlanSnapshot` 定义在调度器文件中，却被计划应用服务使用。
+
+截至 2026 年 9 月 8 日，非 OAuth 范围的第一轮迁移已经完成：
+
+- 监控任务应用服务和本地持久化已改为函数能力记录；
+- 商品计划新增 `PromotionPlanPlatformCapabilities`，应用服务不再引用千川 HTTP 客户端、平台 URL 或平台响应解析函数；
+- `qianchuan-promotion-plan-adapter.ts` 集中负责 OpenAPI URL、查询映射、响应标准化和受控写接口；
+- `MonitorPlanSnapshot` 已移动到应用能力模块，调度器不再作为计划领域类型的归属处；
+- OAuth 客户端与用户隔离仍按约定暂缓，等待服务端新契约稳定后联动重构。
 
 真实依赖更接近：
 
@@ -463,11 +471,12 @@ Shared Contracts → node:fs / electron / fetch
 
 > OAuth 客户端与用户隔离暂不纳入本阶段，等待 OAuth 服务端新契约稳定后再两端联动调整。
 
-1. 将千川计划查询和写入能力逐步改为显式函数记录；
-2. 将监控调度、通知、时钟和任务持久化能力改为显式函数记录；
-3. 将平台 URL、请求参数、响应标准化全部留在 `infrastructure/qianchuan`；
-4. 让应用用例只依赖能力函数，不引用 Infrastructure 具体返回类型；
-5. 让现有测试传入测试函数，而不是 Mock Infrastructure 具体类型。
+1. [已完成第一轮] 将千川计划查询和写入能力改为显式函数记录；
+2. [已完成第一轮] 将监控任务存储和应用服务改为显式函数记录；调度器仍需继续拆分并发、取消和重试策略；
+3. [已完成第一轮] 将平台 URL、请求参数、响应标准化集中留在 `infrastructure/qianchuan`；
+4. [已完成第一轮] 让计划应用用例只依赖能力函数，不引用 Infrastructure 具体返回类型；
+5. [已完成第一轮] 计划应用服务测试直接传入测试函数，不再 Mock HTTP 客户端；
+6. [暂缓] OAuth 客户端与用户隔离等待服务端新契约，不在 Electron 侧创建临时兼容层。
 
 ### 阶段 C：拆分查询和领域模型
 

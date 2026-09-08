@@ -4,17 +4,7 @@ import type {
   MonitorTaskCheckResult,
   MonitorTaskStatus,
 } from '../shared/contracts/monitor-task'
-
-/** 调度器只依赖平台计划的最小字段，避免把平台原始响应带入本地业务。 */
-export type MonitorPlanSnapshot = {
-  id: string
-  name?: string
-  budgetYuan?: number
-  metrics?: {
-    costYuan?: number
-    payRoi?: number
-  }
-}
+import type { MonitorPlanSnapshot } from './application/capabilities/promotion-plan'
 
 export type MonitorSchedulerStore = {
   listAll: () => Promise<MonitorTask[]>

@@ -258,7 +258,12 @@ export const normalizeProductPlanResponse = (payload: Record<string, unknown>, q
       scene: query.scene,
       keyword: query.keyword,
     },
-    plans: Array.isArray(data.ad_list) ? (data.ad_list as Record<string, unknown>[]).map(normalizePlan) : [],
+    plans: Array.isArray(data.ad_list)
+      ? (data.ad_list as Record<string, unknown>[]).map((item) => ({
+          ...normalizePlan(item),
+          advertiserId: query.advertiserId,
+        }))
+      : [],
     page: {
       current: toFiniteNumber(pageInfo.page, query.page),
       size: toFiniteNumber(pageInfo.page_size, query.pageSize),

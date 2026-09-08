@@ -5,6 +5,7 @@ import { createAuthService } from './main/application/auth-service'
 import { createMonitorTaskService } from './main/application/monitor-task-service'
 import { createPromotionPlanService } from './main/application/promotion-plan-service'
 import { createQianchuanApiClient } from './main/infrastructure/qianchuan-api-client'
+import { createQianchuanPromotionPlanAdapter } from './main/infrastructure/qianchuan-promotion-plan-adapter'
 import { notifyMonitorTask } from './main/infrastructure/electron-monitor-notifier'
 import { createJsonMonitorTaskPersistence } from './main/infrastructure/json-monitor-task-persistence'
 import { createOAuthServerClient } from './main/infrastructure/oauth-server-client'
@@ -43,10 +44,11 @@ app.whenReady().then(async () => {
 
   // 千川 API 客户端：主进程直接调用巨量开放平台 API，不再经过服务端代理
   const qianchuanApiClient = createQianchuanApiClient()
+  const promotionPlanPlatform = createQianchuanPromotionPlanAdapter({ apiClient: qianchuanApiClient })
 
-  // auth-service 同时充当 TokenProvider，为千川 API 客户端提供 Access Token
+  // auth-service 只提供主进程内存中的短期 Access Token；平台请求由适配器负责。
   const promotionPlanService = createPromotionPlanService({
-    apiClient: qianchuanApiClient,
+    platform: promotionPlanPlatform,
     tokenProvider: authService,
   })
 
