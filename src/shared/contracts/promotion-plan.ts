@@ -1,5 +1,7 @@
 import { z } from 'zod'
 
+import { resultSchema, type Result } from './result'
+
 const ipcQueryText = z.string().max(500)
 
 /**
@@ -28,13 +30,36 @@ export const promotionPlanListInputSchema = z
 
 export type PromotionPlanListInput = z.infer<typeof promotionPlanListInputSchema>
 
+/**
+ * 监控创建页的专用查询输入。
+ *
+ * 监控选计划与普通工作台列表虽然复用同一平台读取能力，但查询口径不同：
+ * 监控需要一次读取足够多的候选计划，且不应该继承工作台的日期筛选。
+ * 单独建模后，Renderer 不再通过 status、pageSize 等底层参数“暗示”业务语义。
+ */
+export const promotionPlanMonitorSelectionInputSchema = z
+  .object({
+    advertiserId: z.string().trim().max(128).optional(),
+    scene: z.string().max(128).optional(),
+  })
+  .strip()
+
+export type PromotionPlanMonitorSelectionInput = z.infer<typeof promotionPlanMonitorSelectionInputSchema>
+
+/** 商品列表只保留页面需要的稳定字段，未知平台字段在此边界被裁剪。 */
 export const productSchema = z
   .object({
+    id: z.string().optional(),
     name: z.string().optional(),
     image: z.string().optional(),
+    recommendReasons: z.array(z.string()).optional(),
   })
-  .passthrough()
+  .strip()
 
+/**
+ * 计划列表的白名单模型。
+ * 应用层和 Renderer 都只使用这些 camelCase 字段，避免平台响应对象意外透传。
+ */
 export const promotionPlanSchema = z
   .object({
     id: z.union([z.string(), z.number()]).transform(String),
@@ -44,7 +69,16 @@ export const promotionPlanSchema = z
       .transform((value) => (value === undefined ? undefined : String(value))),
     name: z.string().optional(),
     status: z.string().optional(),
+    optStatus: z.string().optional(),
     createTime: z.string().optional(),
+    startTime: z.string().optional(),
+    endTime: z.string().optional(),
+    marketingGoal: z.string().optional(),
+    scene: z.string().optional(),
+    smartBidType: z.string().optional(),
+    budgetMode: z.string().optional(),
+    budgetYuan: z.union([z.number(), z.string()]).optional(),
+    roiGoal: z.union([z.number(), z.string()]).optional(),
     products: z.array(productSchema).optional(),
     metrics: z
       .object({
@@ -54,12 +88,49 @@ export const promotionPlanSchema = z
         payOrderCount: z.union([z.number(), z.string()]).optional(),
         costPerPayOrderYuan: z.union([z.number(), z.string()]).optional(),
       })
-      .passthrough()
+      .strip()
       .optional(),
   })
-  .passthrough()
+  .strip()
 
-/** Renderer 仅解析页面依赖字段，平台或服务端新增字段会被原样保留。 */
+const promotionPlanListPageSchema = z
+  .object({
+    current: z.union([z.number(), z.string()]).optional(),
+    size: z.union([z.number(), z.string()]).optional(),
+    total: z.union([z.number(), z.string()]).optional(),
+    totalPages: z.union([z.number(), z.string()]).optional(),
+  })
+  .strip()
+
+const promotionPlanListQuerySchema = z
+  .object({
+    marketingGoal: z.string().optional(),
+    startDate: z.string().optional(),
+    endDate: z.string().optional(),
+    status: z.string().optional(),
+    scene: z.string().optional(),
+    keyword: z.string().optional(),
+  })
+  .strip()
+
+/** Result<T> 成功分支中的计划列表数据，不再混入 ok/status/message 等控制字段。 */
+export const promotionPlanListDataSchema = z
+  .object({
+    advertiserId: z.string(),
+    plans: z.array(promotionPlanSchema),
+    page: promotionPlanListPageSchema.optional(),
+    query: promotionPlanListQuerySchema.optional(),
+  })
+  .strip()
+
+export type PromotionPlan = z.infer<typeof promotionPlanSchema>
+export type PromotionPlanListData = z.infer<typeof promotionPlanListDataSchema>
+
+/** 计划列表 IPC 的稳定联合契约，Renderer 只需根据 ok 判别成功或失败分支。 */
+export const promotionPlanListResultSchema = resultSchema(promotionPlanListDataSchema)
+export type PromotionPlanListResult = Result<PromotionPlanListData>
+
+/** 兼容 Application/Infrastructure 过渡期使用的旧列表结构，输出同样采用白名单裁剪。 */
 export const promotionPlanResultSchema = z
   .object({
     ok: z.boolean().optional().default(false),
@@ -71,25 +142,12 @@ export const promotionPlanResultSchema = z
       .optional()
       .transform((value) => (value === undefined ? undefined : String(value))),
     plans: z.array(promotionPlanSchema).optional().default([]),
-    page: z
-      .object({
-        current: z.union([z.number(), z.string()]).optional(),
-        total: z.union([z.number(), z.string()]).optional(),
-        totalPages: z.union([z.number(), z.string()]).optional(),
-      })
-      .passthrough()
-      .optional(),
-    query: z
-      .object({
-        startDate: z.string().optional(),
-        endDate: z.string().optional(),
-      })
-      .passthrough()
-      .optional(),
+    page: promotionPlanListPageSchema.optional(),
+    query: promotionPlanListQuerySchema.optional(),
+    requestId: z.string().optional(),
   })
-  .passthrough()
+  .strip()
 
-export type PromotionPlan = z.infer<typeof promotionPlanSchema>
 export type PromotionPlanResult = z.infer<typeof promotionPlanResultSchema>
 
 /** 详情查询只接受广告主 ID 与计划 ID，均由 IPC 边界再次校验。 */
@@ -229,7 +287,8 @@ export const promotionPlanDetailSnapshotSchema = z
   })
   .strip()
 
-export const promotionPlanDetailResultSchema = z
+/** Infrastructure/Application 过渡期间使用的旧详情结构，不能直接作为 IPC 公共协议。 */
+export const promotionPlanLegacyDetailResultSchema = z
   .object({
     ok: z.boolean().optional().default(false),
     status: z.string().optional(),
@@ -240,9 +299,16 @@ export const promotionPlanDetailResultSchema = z
   })
   .strip()
 
+/** 详情 IPC 的成功数据只暴露经过主进程裁剪的版本化快照。 */
+export const promotionPlanDetailDataSchema = z.object({ snapshot: promotionPlanDetailSnapshotSchema }).strip()
+
+export const promotionPlanDetailResultSchema = resultSchema(promotionPlanDetailDataSchema)
+
 export type PromotionPlanDetailInput = z.infer<typeof promotionPlanDetailInputSchema>
 export type PromotionPlanDetailSnapshot = z.infer<typeof promotionPlanDetailSnapshotSchema>
-export type PromotionPlanDetailResult = z.infer<typeof promotionPlanDetailResultSchema>
+export type PromotionPlanLegacyDetailResult = z.infer<typeof promotionPlanLegacyDetailResultSchema>
+export type PromotionPlanDetailData = z.infer<typeof promotionPlanDetailDataSchema>
+export type PromotionPlanDetailResult = Result<PromotionPlanDetailData>
 
 /**
  * 计划修改草稿只描述本地拟修改的字段，不代表已经向千川提交。

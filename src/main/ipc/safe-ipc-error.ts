@@ -1,7 +1,7 @@
 import { ZodError } from 'zod'
 
+import { getOAuthCapabilityErrorDetails } from '../application/capabilities/oauth'
 import { MonitorTaskValidationError } from '../monitor-task-store'
-import { getRequestErrorDetails } from '../infrastructure/oauth-server-client'
 
 /** 将异常转换成不包含 Token、Secret、Cookie 和本地路径的 IPC 响应。 */
 export const toSafeError = (error: unknown) => {
@@ -12,7 +12,7 @@ export const toSafeError = (error: unknown) => {
     return { ok: false, status: 'validation_error', message: error.message }
   }
 
-  const details = getRequestErrorDetails(error)
+  const details = getOAuthCapabilityErrorDetails(error)
   if (details.status === 503) {
     return {
       ok: false,
@@ -20,12 +20,11 @@ export const toSafeError = (error: unknown) => {
       message: '登录服务暂未准备好，请稍后重试。',
     }
   }
-  if (details.payload && [400, 401, 403, 502].includes(details.status || 0)) {
+  if (details.status && [400, 401, 403, 502].includes(details.status)) {
     return {
       ok: false,
-      status: typeof details.payload.status === 'string' ? details.payload.status : 'error',
-      message: typeof details.payload.message === 'string' ? details.payload.message : '服务端请求失败。',
-      platformCode: details.payload.platformCode ?? null,
+      status: details.payloadStatus ?? 'error',
+      message: details.message || '服务端请求失败。',
     }
   }
   return {

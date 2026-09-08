@@ -71,6 +71,96 @@ describe('本地监控调度器', () => {
     expect(changed).toEqual(['task-1'])
   })
 
+  it('同一广告主运行中时返回 busy，不重复发起平台读取', async () => {
+    let tasks = [createTask()]
+    let releaseFetch: ((plans: MonitorPlanSnapshot[]) => void) | undefined
+    let markFetchStarted: (() => void) | undefined
+    const fetchStarted = new Promise<void>((resolve) => {
+      markFetchStarted = resolve
+    })
+    const scheduler = createMonitorScheduler({
+      store: {
+        listAll: async () => tasks,
+        recordCheck: async (taskId, checkedAt, result) => {
+          tasks = tasks.map((task) =>
+            task.id === taskId ? { ...task, lastCheckedAt: checkedAt.toISOString(), lastResult: result } : task,
+          )
+          return tasks.find((task) => task.id === taskId) as MonitorTask
+        },
+      },
+      fetchPlans: async () => {
+        markFetchStarted?.()
+        return new Promise<MonitorPlanSnapshot[]>((resolve) => {
+          releaseFetch = resolve
+        })
+      },
+      now: () => new Date('2026-09-05T02:35:00.000Z'),
+    })
+
+    const firstRun = scheduler.runOnce({ force: true })
+    await fetchStarted
+
+    await expect(scheduler.runOnce({ force: true })).resolves.toEqual({
+      checkedCount: 0,
+      triggeredCount: 0,
+      normalCount: 0,
+      errorCount: 0,
+      dataMissingCount: 0,
+      skipped: true,
+    })
+
+    releaseFetch?.([{ id: 'plan-1', metrics: { payRoi: 1.1 } }])
+    await expect(firstRun).resolves.toMatchObject({
+      checkedCount: 1,
+      skipped: false,
+    })
+  })
+
+  it('不同广告主可以并行读取，不会被彼此的运行锁阻塞', async () => {
+    const firstTask = createTask()
+    const secondTask = createTask({ id: 'task-2', advertiserId: '186002', promotionPlanId: 'plan-2' })
+    const tasks = [firstTask, secondTask]
+    const startedAdvertisers: string[] = []
+    const releaseFetches = new Map<string, (plans: MonitorPlanSnapshot[]) => void>()
+    let resolveBothStarted: (() => void) | undefined
+    const bothStarted = new Promise<void>((resolve) => {
+      resolveBothStarted = resolve
+    })
+    const scheduler = createMonitorScheduler({
+      store: {
+        listAll: async () => tasks,
+        recordCheck: async (taskId, checkedAt, result) =>
+          tasks.find((task) => task.id === taskId)
+            ? ({
+                ...tasks.find((task) => task.id === taskId),
+                lastCheckedAt: checkedAt.toISOString(),
+                lastResult: result,
+              } as MonitorTask)
+            : (undefined as never),
+      },
+      fetchPlans: async (advertiserId) => {
+        startedAdvertisers.push(advertiserId)
+        if (startedAdvertisers.length === 2) resolveBothStarted?.()
+        return new Promise<MonitorPlanSnapshot[]>((resolve) => {
+          releaseFetches.set(advertiserId, resolve)
+        })
+      },
+      now: () => new Date('2026-09-05T02:35:00.000Z'),
+    })
+
+    const run = scheduler.runOnce({ force: true })
+    await bothStarted
+    expect(startedAdvertisers.sort()).toEqual(['186001', '186002'])
+
+    releaseFetches.get('186001')?.([{ id: 'plan-1', metrics: { payRoi: 1.1 } }])
+    releaseFetches.get('186002')?.([{ id: 'plan-2', metrics: { payRoi: 1.1 } }])
+
+    await expect(run).resolves.toMatchObject({
+      checkedCount: 2,
+      skipped: false,
+    })
+  })
+
   it('平台读取失败时记录错误，不让调度器崩溃', async () => {
     let tasks = [createTask()]
     const scheduler = createMonitorScheduler({

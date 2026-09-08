@@ -9,7 +9,10 @@
 
 import { createHash } from 'node:crypto'
 
-import type { PromotionPlanDetailResult, PromotionPlanDetailSnapshot } from '../../shared/contracts/promotion-plan'
+import type {
+  PromotionPlanLegacyDetailResult,
+  PromotionPlanDetailSnapshot,
+} from '../../shared/contracts/promotion-plan'
 
 // ─── 常量 ──────────────────────────────────────────────────
 
@@ -383,7 +386,7 @@ export const normalizeProductPlanDetailResponse = (
   payload: JsonRecord,
   advertiserId: string,
   fetchedAt: string,
-): PromotionPlanDetailResult => {
+): PromotionPlanLegacyDetailResult => {
   const data = asRecord(payload.data)
   const delivery = asRecord(data.delivery_setting)
   const products = asArray(data.product_infos).map((item) => ({

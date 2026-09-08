@@ -1,6 +1,6 @@
 import type {
   PromotionPlanDetailInput,
-  PromotionPlanDetailResult,
+  PromotionPlanLegacyDetailResult,
   PromotionPlanResult,
 } from '../../../shared/contracts/promotion-plan'
 import type {
@@ -77,7 +77,7 @@ export type PromotionPlanPlatformWriteResult = PromotionPlanWriteStepResult
  */
 export type PromotionPlanPlatformCapabilities = {
   list: (input: PromotionPlanPlatformListInput) => Promise<PromotionPlanResult>
-  getDetail: (input: PromotionPlanPlatformDetailInput) => Promise<PromotionPlanDetailResult>
+  getDetail: (input: PromotionPlanPlatformDetailInput) => Promise<PromotionPlanLegacyDetailResult>
   executeWrite: (input: PromotionPlanPlatformWriteInput) => Promise<PromotionPlanPlatformWriteResult>
   isAccessTokenInvalid: (error: unknown) => boolean
 }

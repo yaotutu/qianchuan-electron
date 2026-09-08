@@ -17,6 +17,8 @@ import {
 import type { ColumnProps } from '@arco-design/web-react/es/Table'
 import { queryClient } from '../../../app/query-client'
 import { qianchuanApi } from '../../../shared/api/qianchuan-api'
+import { promotionPlanQueryKeys } from '../../../shared/query-keys'
+import { buildMonitorPlanSelectionInput } from '../query'
 import type { AdvertiserAccount, MonitorRule, PromotionPlan } from '../../../../shared/contracts'
 import { showErrorFeedback, showSuccessFeedback } from '../../../shared/ui/feedback'
 import { getAccountName } from '../model'
@@ -50,21 +52,13 @@ export const MonitorCreatePage = ({ advertiserId, accounts, onAdvertiserChange, 
   const [intervalMinutes, setIntervalMinutes] = useState(5)
   const [detailPlan, setDetailPlan] = useState<PromotionPlan | null>(null)
 
+  const planSelectionInput = buildMonitorPlanSelectionInput(advertiserId)
   const plansQuery = useQuery({
-    queryKey: ['promotion-monitor', 'create-plans', advertiserId],
-    queryFn: () =>
-      qianchuanApi.listPromotionPlans({
-        advertiserId,
-        keyword: '',
-        status: 'ALL',
-        scene: 'UNI_PROJECT',
-        dateRange: {},
-        page: 1,
-        pageSize: 100,
-      }),
+    queryKey: promotionPlanQueryKeys.monitorSelection(planSelectionInput),
+    queryFn: () => qianchuanApi.findPlansForMonitor(planSelectionInput),
     enabled: Boolean(advertiserId),
   })
-  const plans = plansQuery.data?.plans || []
+  const plans = plansQuery.data?.ok === true ? plansQuery.data.data.plans : []
   const selectedPlans = useMemo(
     () => plans.filter((plan) => selectedPlanIds.includes(plan.id)),
     [plans, selectedPlanIds],
@@ -192,7 +186,8 @@ export const MonitorCreatePage = ({ advertiserId, accounts, onAdvertiserChange, 
             }))}
           />
           <Text type="secondary">
-            已选择 {selectedPlans.length} 条 · 共 {plansQuery.data?.page?.total || plans.length} 条
+            已选择 {selectedPlans.length} 条 · 共{' '}
+            {(plansQuery.data?.ok === true ? plansQuery.data.data.page?.total : undefined) || plans.length} 条
           </Text>
         </div>
         {plansQuery.isError && (
@@ -206,9 +201,7 @@ export const MonitorCreatePage = ({ advertiserId, accounts, onAdvertiserChange, 
             }
           />
         )}
-        {plansQuery.data?.ok === false && (
-          <Alert type="error" content={plansQuery.data.message || '获取商品投放计划失败。'} />
-        )}
+        {plansQuery.data?.ok === false && <Alert type="error" content={plansQuery.data.error.message} />}
         <Table
           rowKey="id"
           columns={columns}

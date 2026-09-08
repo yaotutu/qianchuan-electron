@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import type {
-  PromotionPlanDetailResult,
+  PromotionPlanLegacyDetailResult,
   PromotionPlanDetailSnapshot,
   PromotionPlanResult,
 } from '../../../shared/contracts/promotion-plan'
@@ -58,7 +58,7 @@ const createSnapshot = (overrides: Partial<PromotionPlanDetailSnapshot> = {}): P
   ...overrides,
 })
 
-const createDetailResult = (snapshot = createSnapshot()): PromotionPlanDetailResult => ({
+const createDetailResult = (snapshot = createSnapshot()): PromotionPlanLegacyDetailResult => ({
   ok: true,
   status: 'ready',
   snapshot,
@@ -119,6 +119,32 @@ const createWriteInput = (
 const tokenInvalidError = () => Object.assign(new Error('Token 失效'), { tokenInvalid: true })
 
 describe('商品投放计划应用服务', () => {
+  it('监控候选计划使用独立查询口径，不继承工作台日期和分页输入', async () => {
+    const list = vi.fn(async ({ query }: Parameters<PromotionPlanPlatformCapabilities['list']>[0]) =>
+      createListResult(query.pagination.page, []),
+    )
+    const service = createPromotionPlanService({
+      platform: createMockPlatform({ list }),
+      tokenProvider: createMockTokenProvider(),
+      now: () => fixedNow,
+    })
+
+    await service.findPlansForMonitor({ advertiserId: '186001', scene: 'UNI_PROJECT' })
+
+    expect(list).toHaveBeenCalledWith(
+      expect.objectContaining({
+        query: {
+          advertiserId: '186001',
+          keyword: '',
+          status: 'ALL',
+          scene: 'UNI_PROJECT',
+          dateRange: { startDate: undefined, endDate: undefined },
+          pagination: { page: 1, pageSize: 100 },
+        },
+      }),
+    )
+  })
+
   it('按页读取监控快照，并在找到全部目标计划后停止', async () => {
     const list = vi.fn(async ({ query }: Parameters<PromotionPlanPlatformCapabilities['list']>[0]) => {
       const page = query.pagination.page
@@ -374,5 +400,145 @@ describe('商品投放计划应用服务', () => {
     await expect(service.update(createWriteInput(snapshot, { budgetYuan: 300 }))).resolves.toMatchObject({ ok: true })
     expect(executeWrite).toHaveBeenCalledTimes(2)
     expect(tokenProvider.refreshAccessToken).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('计划列表 Result 适配器', () => {
+  it('将成功的旧列表结果转换为稳定的 Result<T> data', async () => {
+    const platform = createMockPlatform({
+      list: async () =>
+        createListResult(1, [{ id: '9001', advertiserId: '186001', name: '计划一', budgetYuan: 200, metrics: {} }]),
+    })
+    const service = createPromotionPlanService({
+      platform,
+      tokenProvider: createMockTokenProvider(),
+      now: () => fixedNow,
+    })
+
+    await expect(service.listResult({ advertiserId: '186001' })).resolves.toEqual({
+      ok: true,
+      data: {
+        advertiserId: '186001',
+        plans: [{ id: '9001', advertiserId: '186001', name: '计划一', budgetYuan: 200, metrics: {} }],
+        page: { current: 1, totalPages: 3, total: 3 },
+      },
+    })
+  })
+
+  it('未登录时返回 UNAUTHORIZED，不把异常抛给 IPC 调用方', async () => {
+    const service = createPromotionPlanService({
+      platform: createMockPlatform(),
+      tokenProvider: createMockTokenProvider({ accessToken: null }),
+      now: () => fixedNow,
+    })
+
+    await expect(service.listResult()).resolves.toEqual({
+      ok: false,
+      error: {
+        code: 'UNAUTHORIZED',
+        message: '当前未登录，请先完成巨量千川授权。',
+        retryable: false,
+      },
+    })
+  })
+
+  it('网络错误和平台鉴权错误分别映射为可重试与需重新授权的错误码', async () => {
+    const unavailableService = createPromotionPlanService({
+      platform: createMockPlatform({
+        list: async () => {
+          throw new Error('网络请求失败')
+        },
+      }),
+      tokenProvider: createMockTokenProvider(),
+      now: () => fixedNow,
+    })
+    await expect(unavailableService.listResult()).resolves.toMatchObject({
+      ok: false,
+      error: { code: 'PLATFORM_UNAVAILABLE', retryable: true },
+    })
+
+    const unauthorizedError = Object.assign(new Error('平台鉴权失败'), { platformCode: 40105 })
+    const unauthorizedService = createPromotionPlanService({
+      platform: createMockPlatform({
+        list: async () => {
+          throw unauthorizedError
+        },
+      }),
+      tokenProvider: createMockTokenProvider(),
+      now: () => fixedNow,
+    })
+    await expect(unauthorizedService.listResult()).resolves.toMatchObject({
+      ok: false,
+      error: { code: 'UNAUTHORIZED', retryable: false },
+    })
+  })
+
+  it('普通平台业务错误映射为 PLATFORM_BUSINESS_ERROR', async () => {
+    const service = createPromotionPlanService({
+      platform: createMockPlatform({
+        list: async () => {
+          throw new Error('计划被平台拒绝')
+        },
+      }),
+      tokenProvider: createMockTokenProvider(),
+      now: () => fixedNow,
+    })
+
+    await expect(service.listResult()).resolves.toMatchObject({
+      ok: false,
+      error: { code: 'PLATFORM_BUSINESS_ERROR', retryable: false },
+    })
+  })
+})
+
+describe('计划详情 Result 适配器', () => {
+  it('将旧详情结果转换为只包含快照 data 的稳定 Result', async () => {
+    const snapshot = createSnapshot()
+    const service = createPromotionPlanService({
+      platform: createMockPlatform({ getDetail: async () => createDetailResult(snapshot) }),
+      tokenProvider: createMockTokenProvider(),
+      now: () => fixedNow,
+    })
+
+    await expect(service.getDetailResult({ advertiserId: '186001', adId: '9001' })).resolves.toEqual({
+      ok: true,
+      data: { snapshot },
+    })
+  })
+
+  it('详情缺少有效快照时 fail-closed，不返回不完整成功结果', async () => {
+    const service = createPromotionPlanService({
+      platform: createMockPlatform({
+        getDetail: async () => ({ ok: true, message: '平台未返回详情' }),
+      }),
+      tokenProvider: createMockTokenProvider(),
+      now: () => fixedNow,
+    })
+
+    await expect(service.getDetailResult({ advertiserId: '186001', adId: '9001' })).resolves.toEqual({
+      ok: false,
+      error: {
+        code: 'PLATFORM_BUSINESS_ERROR',
+        message: '平台未返回详情',
+        retryable: false,
+      },
+    })
+  })
+
+  it('详情读取沿用统一错误分类，未登录时返回 UNAUTHORIZED', async () => {
+    const service = createPromotionPlanService({
+      platform: createMockPlatform(),
+      tokenProvider: createMockTokenProvider({ accessToken: null }),
+      now: () => fixedNow,
+    })
+
+    await expect(service.getDetailResult({ advertiserId: '186001', adId: '9001' })).resolves.toEqual({
+      ok: false,
+      error: {
+        code: 'UNAUTHORIZED',
+        message: '当前未登录，请先完成巨量千川授权。',
+        retryable: false,
+      },
+    })
   })
 })

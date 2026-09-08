@@ -23,13 +23,18 @@ export type MonitorTaskStoreCapabilities = {
 
 /** 手动检查和定时检查共用的最小调度能力。 */
 export type MonitorTaskSchedulerCapabilities = {
-  runOnce: (options?: { force?: boolean; advertiserId?: string }) => Promise<MonitorTaskRunSummary>
+  runOnce: (options?: MonitorTaskRunOptions) => Promise<MonitorTaskRunSummary>
 }
 
 /**
  * 调度器返回给应用层的纯数据摘要。
- * 应用层不需要知道定时器句柄、并发锁或调度器内部状态。
+ * 应用层不需要知道定时器句柄或并发锁等调度器内部状态。
  */
+export type MonitorTaskRunOptions = {
+  force?: boolean
+  advertiserId?: string
+}
+
 export type MonitorTaskRunSummary = {
   checkedCount: number
   triggeredCount: number

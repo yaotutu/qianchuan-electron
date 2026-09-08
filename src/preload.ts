@@ -7,7 +7,13 @@ import type {
   MonitorTaskStatus,
   MonitorTaskUpdateInput,
 } from './shared/contracts/monitor-task'
-import type { PromotionPlanDetailInput, PromotionPlanListInput } from './shared/contracts/promotion-plan'
+import type {
+  PromotionPlanDetailInput,
+  PromotionPlanDetailResult,
+  PromotionPlanListInput,
+  PromotionPlanMonitorSelectionInput,
+  PromotionPlanListResult,
+} from './shared/contracts/promotion-plan'
 import type { PromotionPlanWriteInput } from './shared/contracts/promotion-plan-write'
 
 /**
@@ -22,8 +28,12 @@ const authBridge = {
 }
 
 const promotionMonitorBridge = {
-  listPlans: (input: PromotionPlanListInput) => ipcRenderer.invoke(IPC_CHANNELS.promotionPlan.list, input),
-  getPlanDetail: (input: PromotionPlanDetailInput) => ipcRenderer.invoke(IPC_CHANNELS.promotionPlan.detail, input),
+  listPlans: (input: PromotionPlanListInput): Promise<PromotionPlanListResult> =>
+    ipcRenderer.invoke(IPC_CHANNELS.promotionPlan.list, input),
+  findPlansForMonitor: (input: PromotionPlanMonitorSelectionInput): Promise<PromotionPlanListResult> =>
+    ipcRenderer.invoke(IPC_CHANNELS.promotionPlan.findForMonitor, input),
+  getPlanDetail: (input: PromotionPlanDetailInput): Promise<PromotionPlanDetailResult> =>
+    ipcRenderer.invoke(IPC_CHANNELS.promotionPlan.detail, input),
   updatePlan: (input: PromotionPlanWriteInput) => ipcRenderer.invoke(IPC_CHANNELS.promotionPlan.update, input),
   listTasks: (filters: MonitorTaskFilters) => ipcRenderer.invoke(IPC_CHANNELS.monitorTask.list, filters),
   createTask: (input: MonitorTaskCreateInput) => ipcRenderer.invoke(IPC_CHANNELS.monitorTask.create, input),

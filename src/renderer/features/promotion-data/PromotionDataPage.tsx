@@ -7,7 +7,7 @@ import { useWorkspacePlans } from '../workspace-plans/useWorkspacePlans'
 const yuan = (value: number) => `${value.toLocaleString('zh-CN', { maximumFractionDigits: 2 })} 元`
 export const PromotionDataPage = ({ currentAccountId }: { currentAccountId: string }) => {
   const query = useWorkspacePlans(currentAccountId)
-  const plans = query.data?.plans || []
+  const plans = query.data?.ok === true ? query.data.data.plans : []
   const summary = summarizePromotionPlans(plans)
   const columns = [
     { title: '计划', render: (_: unknown, plan: PromotionPlan) => plan.name || `计划 ${plan.id}` },
@@ -37,7 +37,7 @@ export const PromotionDataPage = ({ currentAccountId }: { currentAccountId: stri
           pending={query.isPending}
           error={query.isError}
           ok={query.data?.ok}
-          message={query.data?.message}
+          message={query.data?.ok === false ? query.data.error.message : undefined}
           empty={!plans.length}
           onRetry={() => void query.refetch()}
         >

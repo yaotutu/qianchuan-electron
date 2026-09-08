@@ -14,6 +14,7 @@ import {
 import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { qianchuanApi } from '../../../shared/api/qianchuan-api'
+import { promotionPlanQueryKeys } from '../../../shared/query-keys'
 import { showErrorFeedback, showSuccessFeedback } from '../../../shared/ui/feedback'
 import type { PromotionPlanDetailSnapshot, PromotionPlanEditChanges } from '../../../../shared/contracts'
 import { promotionPlanEditDraftSchema } from '../../../../shared/contracts'
@@ -57,7 +58,10 @@ export const PromotionPlanEditPreview = ({ snapshot }: PromotionPlanEditPreviewP
         // 需要主动刷新详情并提醒用户核对平台最终值，避免基于旧快照继续编辑。
         if (result.status === 'partial_updated') {
           await queryClient.invalidateQueries({
-            queryKey: ['promotion-plan-detail', snapshot.identity.advertiserId, snapshot.identity.adId],
+            queryKey: promotionPlanQueryKeys.detail({
+              advertiserId: snapshot.identity.advertiserId,
+              adId: snapshot.identity.adId,
+            }),
           })
           setConfirmed(false)
           showErrorFeedback(result.message || '部分修改可能已经生效，请刷新详情核对预算和支付 ROI。')
@@ -67,7 +71,10 @@ export const PromotionPlanEditPreview = ({ snapshot }: PromotionPlanEditPreviewP
         return
       }
       await queryClient.invalidateQueries({
-        queryKey: ['promotion-plan-detail', snapshot.identity.advertiserId, snapshot.identity.adId],
+        queryKey: promotionPlanQueryKeys.detail({
+          advertiserId: snapshot.identity.advertiserId,
+          adId: snapshot.identity.adId,
+        }),
       })
       setConfirmed(false)
       setShowPreview(false)

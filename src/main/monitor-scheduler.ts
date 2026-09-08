@@ -5,6 +5,7 @@ import type {
   MonitorTaskStatus,
 } from '../shared/contracts/monitor-task'
 import type { MonitorPlanSnapshot } from './application/capabilities/promotion-plan'
+import type { MonitorTaskRunOptions, MonitorTaskRunSummary } from './application/capabilities/monitor-task'
 
 export type MonitorSchedulerStore = {
   listAll: () => Promise<MonitorTask[]>
@@ -100,7 +101,11 @@ export const createMonitorScheduler = (dependencies: SchedulerDependencies) => {
   }
   const tickIntervalMs = dependencies.tickIntervalMs ?? 60_000
   let intervalHandle: ReturnType<typeof setInterval> | null = null
-  let checking = false
+  /**
+   * 同一广告主的读取和结果写回必须串行，避免手动运行与定时运行同时覆盖任务结果。
+   * 不使用全局锁：不同广告主仍可以并行检查，减少一个账号异常对其他账号的阻塞。
+   */
+  const runningAdvertisers = new Set<string>()
 
   const checkTask = async (task: MonitorTask, plans: MonitorPlanSnapshot[], checkedAt: Date) => {
     const plan = plans.find((candidate) => candidate.id === task.promotionPlanId)
@@ -113,29 +118,37 @@ export const createMonitorScheduler = (dependencies: SchedulerDependencies) => {
     return result.status
   }
 
-  const runOnce = async (options: { force?: boolean; advertiserId?: string } = {}) => {
-    if (checking)
+  const runOnce = async (options: MonitorTaskRunOptions = {}): Promise<MonitorTaskRunSummary> => {
+    const timestamp = now()
+    const runningTasks = (await dependencies.store.listAll()).filter(
+      (task) =>
+        task.status === 'RUNNING' &&
+        (!options.advertiserId || task.advertiserId === options.advertiserId) &&
+        (options.force === true || isDue(task, timestamp)),
+    )
+    const groupedTasks = groupByAdvertiser(runningTasks)
+    const availableGroups = [...groupedTasks.entries()].filter(([advertiserId]) => {
+      if (runningAdvertisers.has(advertiserId)) return false
+      runningAdvertisers.add(advertiserId)
+      return true
+    })
+    const skipped = availableGroups.length < groupedTasks.size
+
+    // 所有目标广告主都在运行时返回 skipped；没有到期任务则是正常的空检查，不混淆两种状态。
+    if (availableGroups.length === 0) {
       return {
         checkedCount: 0,
         triggeredCount: 0,
         normalCount: 0,
         errorCount: 0,
         dataMissingCount: 0,
-        skipped: true,
+        skipped,
       }
-    checking = true
-    try {
-      const timestamp = now()
-      const runningTasks = (await dependencies.store.listAll()).filter(
-        (task) =>
-          task.status === 'RUNNING' &&
-          (!options.advertiserId || task.advertiserId === options.advertiserId) &&
-          (options.force === true || isDue(task, timestamp)),
-      )
-      const groupedTasks = groupByAdvertiser(runningTasks)
+    }
 
+    try {
       const groupResults = await Promise.all(
-        [...groupedTasks.entries()].map(async ([advertiserId, tasks]) => {
+        availableGroups.map(async ([advertiserId, tasks]) => {
           let plans: MonitorPlanSnapshot[]
           try {
             plans = await dependencies.fetchPlans(
@@ -163,7 +176,7 @@ export const createMonitorScheduler = (dependencies: SchedulerDependencies) => {
       )
       const statuses = groupResults.flat()
       return {
-        checkedCount: runningTasks.length,
+        checkedCount: statuses.length,
         triggeredCount: statuses.filter((status) => status === 'TRIGGERED').length,
         normalCount: statuses.filter((status) => status === 'NORMAL').length,
         errorCount: statuses.filter((status) => status === 'ERROR').length,
@@ -171,7 +184,7 @@ export const createMonitorScheduler = (dependencies: SchedulerDependencies) => {
         skipped: false,
       }
     } finally {
-      checking = false
+      availableGroups.forEach(([advertiserId]) => runningAdvertisers.delete(advertiserId))
     }
   }
 

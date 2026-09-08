@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { Alert, Descriptions, Divider, Drawer, Empty, Spin, Tag, Typography } from '@arco-design/web-react'
 import { qianchuanApi } from '../../../shared/api/qianchuan-api'
+import { promotionPlanQueryKeys } from '../../../shared/query-keys'
 import type { PromotionPlanDetailSnapshot } from '../../../../shared/contracts'
 import { PromotionPlanEditPreview } from './PromotionPlanEditPreview'
 
@@ -34,11 +35,11 @@ const statusColor = (status: string | undefined) => {
  */
 export const PromotionPlanDetailDrawer = ({ advertiserId, adId, visible, onClose }: PromotionPlanDetailDrawerProps) => {
   const detailQuery = useQuery({
-    queryKey: ['promotion-plan-detail', advertiserId, adId],
+    queryKey: promotionPlanQueryKeys.detail({ advertiserId, adId: adId || '' }),
     queryFn: () => qianchuanApi.getPromotionPlanDetail({ advertiserId, adId: adId || '' }),
     enabled: visible && Boolean(advertiserId && adId),
   })
-  const snapshot = detailQuery.data?.snapshot
+  const snapshot = detailQuery.data?.ok === true ? detailQuery.data.data.snapshot : undefined
 
   return (
     <Drawer title="推广计划详情" visible={visible} width={680} onCancel={onClose} unmountOnExit>
@@ -49,9 +50,7 @@ export const PromotionPlanDetailDrawer = ({ advertiserId, adId, visible, onClose
         </div>
       )}
       {detailQuery.isError && <Alert type="error" content="读取计划详情失败，请检查授权后重试。" />}
-      {detailQuery.data?.ok === false && (
-        <Alert type="error" content={detailQuery.data.message || '读取计划详情失败。'} />
-      )}
+      {detailQuery.data?.ok === false && <Alert type="error" content={detailQuery.data.error.message} />}
       {snapshot && <PlanDetailContent snapshot={snapshot} />}
       {!detailQuery.isPending && !detailQuery.isError && !snapshot && <Empty description="暂未获取到计划详情" />}
     </Drawer>

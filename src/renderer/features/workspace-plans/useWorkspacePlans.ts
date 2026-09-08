@@ -1,5 +1,8 @@
 import { useQuery } from '@tanstack/react-query'
 import { qianchuanApi } from '../../shared/api/qianchuan-api'
+import type { PromotionPlanListResult } from '../../../shared/contracts'
+import { promotionPlanQueryKeys } from '../../shared/query-keys'
+import { buildWorkspacePlanQuery } from './query'
 
 export type WorkspacePlanScene = 'UNI_PROJECT' | 'OVERALL_PROJECT'
 
@@ -18,18 +21,11 @@ const getChinaDate = () =>
  */
 export const useWorkspacePlans = (advertiserId: string, scene: WorkspacePlanScene = 'UNI_PROJECT') => {
   const date = getChinaDate()
-  return useQuery({
-    queryKey: ['workspace-plans', advertiserId, scene, date],
-    queryFn: () =>
-      qianchuanApi.listPromotionPlans({
-        advertiserId,
-        keyword: '',
-        status: 'ALL_INCLUDE_DELETED',
-        scene,
-        dateRange: { startDate: date, endDate: date },
-        page: 1,
-        pageSize: 100,
-      }),
+  const input = buildWorkspacePlanQuery(advertiserId, scene, date)
+
+  return useQuery<PromotionPlanListResult>({
+    queryKey: promotionPlanQueryKeys.list(input),
+    queryFn: () => qianchuanApi.listPromotionPlans(input),
     enabled: Boolean(advertiserId),
   })
 }

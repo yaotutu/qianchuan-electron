@@ -8,7 +8,7 @@ import { useMonitorTasks } from '../promotion-monitor/hooks/useMonitorTasks'
 
 export const MultiplierManagementPage = ({ currentAccountId }: { currentAccountId: string }) => {
   const query = useWorkspacePlans(currentAccountId, 'OVERALL_PROJECT')
-  const plans = query.data?.plans || []
+  const plans = query.data?.ok === true ? query.data.data.plans : []
   const candidates = plans.filter((plan) => plan.scene === 'OVERALL_PROJECT')
   return (
     <div className="workspace-page">
@@ -22,7 +22,7 @@ export const MultiplierManagementPage = ({ currentAccountId }: { currentAccountI
           pending={query.isPending}
           error={query.isError}
           ok={query.data?.ok}
-          message={query.data?.message}
+          message={query.data?.ok === false ? query.data.error.message : undefined}
           empty={!candidates.length}
           onRetry={() => void query.refetch()}
         >
@@ -119,7 +119,7 @@ export const MultiplierMonitorPage = ({
 
 export const MultiplierDataPage = ({ currentAccountId }: { currentAccountId: string }) => {
   const query = useWorkspacePlans(currentAccountId, 'OVERALL_PROJECT')
-  const summary = summarizePromotionPlans(query.data?.plans || [])
+  const summary = summarizePromotionPlans(query.data?.ok === true ? query.data.data.plans : [])
   return (
     <div className="workspace-page">
       <WorkspacePageHeader title="乘方数据" description="按全域计划场景汇总当前查询日指标，数据来源与推广数据一致。" />
@@ -136,8 +136,8 @@ export const MultiplierDataPage = ({ currentAccountId }: { currentAccountId: str
           pending={query.isPending}
           error={query.isError}
           ok={query.data?.ok}
-          message={query.data?.message}
-          empty={!query.data?.plans?.length}
+          message={query.data?.ok === false ? query.data.error.message : undefined}
+          empty={!(query.data?.ok === true && query.data.data.plans.length > 0)}
           onRetry={() => void query.refetch()}
         >
           <Alert type="success" content="以上指标仅代表当前查询日的官方列表返回数据，不推断额外归因口径。" />

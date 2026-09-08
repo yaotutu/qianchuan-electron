@@ -1,17 +1,64 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import { createOAuthServerClient, getRequestErrorDetails } from '../oauth-server-client'
+import { getOAuthCapabilityErrorDetails } from '../../application/capabilities/oauth'
+import { createOAuthServerClient } from '../oauth-server-client'
 
 describe('OAuth 服务端 HTTP 客户端', () => {
-  it('规范化基础地址并解析 JSON 响应', async () => {
-    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ ok: true }), { status: 200 }))
+  it('规范化基础地址并解析健康检查结果', async () => {
+    const fetchImpl = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({ ok: true, version: '1.0.0', configured: true, capabilities: ['current-authorization'] }),
+          {
+            status: 200,
+          },
+        ),
+    )
     const client = createOAuthServerClient({ baseUrl: 'http://127.0.0.1:3100///', fetchImpl })
 
-    await expect(client.request('/health')).resolves.toEqual({ ok: true })
+    await expect(client.getHealth()).resolves.toEqual({
+      ok: true,
+      version: '1.0.0',
+      configured: true,
+      capabilities: ['current-authorization'],
+      missingConfig: [],
+      status: undefined,
+      message: undefined,
+      errorDescription: undefined,
+    })
     expect(fetchImpl.mock.calls[0][0]).toBe('http://127.0.0.1:3100/health')
   })
 
-  it('保留服务端安全错误字段，供应用层做状态映射', async () => {
+  it('把登录结果映射为应用能力，并保留安全业务字段', async () => {
+    const client = createOAuthServerClient({
+      baseUrl: 'http://127.0.0.1:3100',
+      fetchImpl: async () =>
+        new Response(
+          JSON.stringify({
+            ok: true,
+            status: 'success',
+            token: {
+              access_token: 'main-process-token',
+              advertiser_ids: [186001],
+              advertiser_accounts: [{ advertiser_id: 186001, advertiser_name: '测试账户' }],
+            },
+          }),
+          { status: 200 },
+        ),
+    })
+
+    await expect(client.getCurrentAuthorization()).resolves.toMatchObject({
+      ok: true,
+      status: 'success',
+      token: {
+        accessToken: 'main-process-token',
+        advertiserIds: ['186001'],
+        advertiserAccounts: [{ advertiserId: '186001', advertiserName: '测试账户' }],
+      },
+    })
+  })
+
+  it('保留稳定 HTTP 错误分类，供应用层做状态映射', async () => {
     const client = createOAuthServerClient({
       baseUrl: 'http://127.0.0.1:3100',
       fetchImpl: async () =>
@@ -21,13 +68,13 @@ describe('OAuth 服务端 HTTP 客户端', () => {
     })
 
     try {
-      await client.request('/oauth/current')
+      await client.getCurrentAuthorization()
       throw new Error('预期请求失败')
     } catch (error) {
-      expect(getRequestErrorDetails(error)).toMatchObject({
+      expect(getOAuthCapabilityErrorDetails(error)).toEqual({
         status: 401,
         message: '需要重新授权',
-        payload: { status: 'reauthorization_required' },
+        payloadStatus: 'reauthorization_required',
       })
     }
   })
@@ -44,7 +91,7 @@ describe('OAuth 服务端 HTTP 客户端', () => {
       fetchImpl: async () => new Response('not-json', { status: 200 }),
     })
 
-    await expect(offlineClient.request('/health')).rejects.toThrow('无法连接 OAuth 服务端')
-    await expect(invalidJsonClient.request('/health')).rejects.toThrow('无法解析的数据')
+    await expect(offlineClient.getHealth()).rejects.toThrow('无法连接 OAuth 服务端')
+    await expect(invalidJsonClient.getHealth()).rejects.toThrow('无法解析的数据')
   })
 })

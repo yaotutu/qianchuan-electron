@@ -1,7 +1,13 @@
-import { getRequestErrorDetails, type JsonRecord, type OAuthServerClient } from '../infrastructure/oauth-server-client'
+import {
+  getOAuthCapabilityErrorDetails,
+  type OAuthAuthorizationResult,
+  type OAuthCapabilities,
+  type OAuthLoginStatusResult,
+  type OAuthTokenPayload,
+} from './capabilities/oauth'
 
 type AuthServiceDependencies = {
-  client: OAuthServerClient
+  oauth: OAuthCapabilities
   openExternal: (url: string) => Promise<void>
   now?: () => Date
 }
@@ -13,7 +19,7 @@ const REQUIRED_SERVER_CAPABILITIES = ['oauth-attempt-result', 'current-authoriza
  * 服务端负责安全保存和刷新凭据，Electron 主进程拿到 Access Token 后直接调用巨量平台 API。
  * Renderer 不接触 Access Token、Refresh Token 或 App Secret。
  */
-export const createAuthService = ({ client, openExternal, now = () => new Date() }: AuthServiceDependencies) => {
+export const createAuthService = ({ oauth, openExternal, now = () => new Date() }: AuthServiceDependencies) => {
   let activeAttemptId: string | null = null
   let activeLoginStartedAt: string | null = null
 
@@ -25,21 +31,27 @@ export const createAuthService = ({ client, openExternal, now = () => new Date()
    * 启动恢复、Renderer 首次查询和 Token 失效重试可能同时触发 /oauth/current。
    * 合并并发请求可以避免同一时刻重复刷新服务端 Refresh Token，也避免缓存被较旧响应覆盖。
    */
-  let authorizationRestoreInFlight: Promise<JsonRecord> | null = null
+  let authorizationRestoreInFlight: Promise<OAuthAuthorizationResult> | null = null
 
   const clearActiveAttempt = () => {
     activeAttemptId = null
     activeLoginStartedAt = null
   }
 
+  const clearAuthorizationCache = () => {
+    // 授权被撤销或刷新失败时必须清空旧缓存，避免继续使用已作废的本地凭证。
+    cachedAccessToken = null
+    cachedAdvertiserIds = []
+  }
+
   const startLogin = async () => {
-    const result = await client.request('/oauth/oceanengine/start')
+    const result = await oauth.startLogin()
     if (result.ok !== true || typeof result.authorizationUrl !== 'string' || typeof result.attemptId !== 'string') {
       return { ok: false, status: 'server_unavailable', message: '登录服务暂未准备好，请稍后重试。' }
     }
 
     activeAttemptId = result.attemptId
-    activeLoginStartedAt = typeof result.startedAt === 'string' ? result.startedAt : now().toISOString()
+    activeLoginStartedAt = result.startedAt ?? now().toISOString()
     await openExternal(result.authorizationUrl)
     return {
       ok: true,
@@ -51,29 +63,22 @@ export const createAuthService = ({ client, openExternal, now = () => new Date()
   }
 
   /** 授权结果里的 Token 形状；仅主进程内部读取，不作为公开类型导出。 */
-  type AuthorizationToken = {
-    accessToken?: string
-    refreshToken?: string
-    accessTokenExpiresAt?: string
-    refreshTokenExpiresAt?: string
-    advertiserIds?: string[]
-    advertiserAccounts?: unknown
-  }
+  type AuthorizationToken = OAuthTokenPayload
 
-  /** 裁剪任意授权结果中的 Token 原文；OAuth 轮询和当前授权都必须经过这里。 */
-  const stripTokenSecrets = (result: JsonRecord) => {
-    const { token, ...safeResult } = result
-    const authorizationToken = token as AuthorizationToken | undefined
-    if (!authorizationToken) return safeResult
+  /**
+   * 裁剪任意授权结果中的 Token 原文；OAuth 轮询和当前授权都必须经过这里。
+   * 这里显式重建 token 对象，而不是简单透传服务端结果，避免未来服务端增加字段时意外泄露密钥。
+   */
+  const stripTokenSecrets = <T extends OAuthLoginStatusResult | OAuthAuthorizationResult>(result: T) => {
+    const token = result.token as AuthorizationToken | undefined
+    if (!token) return result
 
     return {
-      ...safeResult,
+      ...result,
       token: {
-        accessTokenExpiresAt: authorizationToken.accessTokenExpiresAt,
-        advertiserIds: Array.isArray(authorizationToken.advertiserIds)
-          ? authorizationToken.advertiserIds.map(String)
-          : [],
-        advertiserAccounts: authorizationToken.advertiserAccounts,
+        accessTokenExpiresAt: token.accessTokenExpiresAt,
+        advertiserIds: token.advertiserIds ?? [],
+        advertiserAccounts: token.advertiserAccounts ?? [],
       },
     }
   }
@@ -81,11 +86,11 @@ export const createAuthService = ({ client, openExternal, now = () => new Date()
   const getLoginStatus = async () => {
     if (!activeAttemptId) return { ok: true, status: 'idle', message: '还没有发起本次授权。' }
     try {
-      const result = await client.request(`/oauth/result?attempt_id=${encodeURIComponent(activeAttemptId)}`)
+      const result = await oauth.getLoginStatus(activeAttemptId)
       if (result.status !== 'waiting') clearActiveAttempt()
       return stripTokenSecrets(result)
     } catch (error) {
-      if (getRequestErrorDetails(error).status === 404) {
+      if (getOAuthCapabilityErrorDetails(error).status === 404) {
         clearActiveAttempt()
         return { ok: false, status: 'expired', message: '本次登录请求已经失效，请重新登录。' }
       }
@@ -102,16 +107,14 @@ export const createAuthService = ({ client, openExternal, now = () => new Date()
     if (authorizationRestoreInFlight) return authorizationRestoreInFlight
 
     authorizationRestoreInFlight = (async () => {
-      const result = await client.request(forceRefresh ? '/oauth/current?force_refresh=true' : '/oauth/current')
-      const token = result.token as AuthorizationToken | undefined
+      const result = await oauth.getCurrentAuthorization({ forceRefresh })
+      const token = result.token
 
       if (token?.accessToken) {
         cachedAccessToken = token.accessToken
-        cachedAdvertiserIds = Array.isArray(token.advertiserIds) ? token.advertiserIds.map(String) : []
+        cachedAdvertiserIds = [...(token.advertiserIds ?? [])]
       } else {
-        // 授权被撤销或尚未建立时必须清空旧缓存，避免继续使用已作废的本地凭证。
-        cachedAccessToken = null
-        cachedAdvertiserIds = []
+        clearAuthorizationCache()
       }
 
       // 无论服务端是否有有效 Access Token，都不能把 Token 原文传给 Renderer。
@@ -128,17 +131,15 @@ export const createAuthService = ({ client, openExternal, now = () => new Date()
     try {
       return await readAuthorization()
     } catch (error) {
-      const details = getRequestErrorDetails(error)
+      const details = getOAuthCapabilityErrorDetails(error)
       if (details.status === 404) {
-        cachedAccessToken = null
-        cachedAdvertiserIds = []
+        clearAuthorizationCache()
         return { ok: true, status: 'idle', message: '当前还没有完成授权。' }
       }
       if (details.status === 401) {
         // 401 表示 Refresh Token 不可恢复，需要清理主进程缓存并引导用户重新授权。
-        cachedAccessToken = null
-        cachedAdvertiserIds = []
-        const requiresLogin = details.payload?.status === 'reauthorization_required'
+        clearAuthorizationCache()
+        const requiresLogin = details.payloadStatus === 'reauthorization_required'
         return {
           ok: false,
           status: requiresLogin ? 'reauthorization_required' : 'token_refresh_failed',
@@ -158,15 +159,9 @@ export const createAuthService = ({ client, openExternal, now = () => new Date()
       await readAuthorization(true)
       return cachedAccessToken
     } catch (error) {
-      const details = getRequestErrorDetails(error)
-      if (details.status === 404) {
-        cachedAccessToken = null
-        cachedAdvertiserIds = []
-        return null
-      }
-      if (details.status === 401) {
-        cachedAccessToken = null
-        cachedAdvertiserIds = []
+      const status = getOAuthCapabilityErrorDetails(error).status
+      if (status === 404 || status === 401) {
+        clearAuthorizationCache()
         return null
       }
       throw error
@@ -174,8 +169,8 @@ export const createAuthService = ({ client, openExternal, now = () => new Date()
   }
 
   const getHealth = async () => {
-    const health = await client.request('/health')
-    const capabilities = Array.isArray(health.capabilities) ? health.capabilities : []
+    const health = await oauth.getHealth()
+    const capabilities = health.capabilities ?? []
     if (
       typeof health.version !== 'string' ||
       REQUIRED_SERVER_CAPABILITIES.some((capability) => !capabilities.includes(capability))
@@ -183,7 +178,7 @@ export const createAuthService = ({ client, openExternal, now = () => new Date()
       return { ok: false, status: 'server_outdated', message: '登录服务仍在运行旧版本，请重启登录服务后再试。' }
     }
     if (health.configured !== true) {
-      console.error('OAuth 服务端配置未完成：', health.missingConfig || [])
+      console.error('OAuth 服务端配置未完成：', health.missingConfig ?? [])
       return { ok: false, status: 'server_unavailable', message: '登录服务暂未准备好，请稍后重试。' }
     }
     return { ok: true, status: 'ready', version: health.version }
@@ -200,7 +195,7 @@ export const createAuthService = ({ client, openExternal, now = () => new Date()
      */
     getAccessToken: () => cachedAccessToken,
     /** 返回当前授权的广告主 ID 列表，用于越权检查。 */
-    getAdvertiserIds: () => cachedAdvertiserIds,
+    getAdvertiserIds: () => [...cachedAdvertiserIds],
     /** 触发服务端自动刷新，并返回新的短期 Access Token。 */
     refreshAccessToken,
   }

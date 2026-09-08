@@ -12,7 +12,7 @@
  * - 请求超时有上限，避免界面长时间等待；
  * - 平台错误被映射为稳定的错误类型，不透传平台原始错误对象。
  */
-import type { JsonRecord } from './oauth-server-client'
+import type { JsonRecord } from './json-record'
 
 export type { JsonRecord }
 

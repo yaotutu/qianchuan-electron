@@ -12,9 +12,13 @@ import type {
   PromotionPlan,
   PromotionPlanDetailInput,
   PromotionPlanDetailResult,
+  PromotionPlanLegacyDetailResult,
   PromotionPlanDetailSnapshot,
   PromotionPlanListInput,
+  PromotionPlanListData,
+  PromotionPlanMonitorSelectionInput,
 } from '../../shared/contracts/promotion-plan'
+import { failureResult, resultFromUnknownError, successResult, type Result } from '../../shared/contracts/result'
 import type { PromotionPlanWriteInput, PromotionPlanWriteResult } from '../../shared/contracts/promotion-plan-write'
 import { buildPromotionPlanWritePreflight } from '../../shared/domain/promotion-plan-write-preflight'
 import type {
@@ -152,7 +156,48 @@ export const createPromotionPlanService = ({
     )
   }
 
-  const getDetail = async (input: PromotionPlanDetailInput): Promise<PromotionPlanDetailResult> => {
+  /**
+   * Result 适配器是列表 IPC 的唯一出口：成功分支只暴露脱敏后的 data，
+   * 失败分支把应用内部异常转换成稳定错误码，避免 Renderer 解析旧的可选 status/message 字段。
+   * 保留上面的 list 函数供主进程监控调度器使用，迁移期间不改变其内部调用语义。
+   */
+  const listResult = async (input: PromotionPlanQuery = {}): Promise<Result<PromotionPlanListData>> => {
+    try {
+      const legacyResult = await list(input)
+      if (legacyResult.ok !== true || !legacyResult.advertiserId) {
+        return failureResult('PLATFORM_BUSINESS_ERROR', '千川平台未完成本次查询，请检查授权和查询条件后重试。')
+      }
+
+      return successResult({
+        advertiserId: legacyResult.advertiserId,
+        plans: legacyResult.plans,
+        page: legacyResult.page,
+        query: legacyResult.query,
+      })
+    } catch (error) {
+      return resultFromUnknownError(error)
+    }
+  }
+
+  /**
+   * 监控创建页使用独立的查询语义：只读取当前场景下的候选计划，不继承工作台的日期筛选，
+   * 也不允许 Renderer 自己决定分页大小或拼接平台查询参数。
+   *
+   * 这里仍然复用已核实的商品计划列表能力，而不是新增平台接口；差异只存在于应用层默认口径。
+   */
+  const findPlansForMonitor = async (
+    input: PromotionPlanMonitorSelectionInput = {},
+  ): Promise<Result<PromotionPlanListData>> =>
+    listResult({
+      advertiserId: input.advertiserId,
+      scene: input.scene || 'UNI_PROJECT',
+      status: 'ALL',
+      dateRange: {},
+      page: 1,
+      pageSize: 100,
+    })
+
+  const getDetail = async (input: PromotionPlanDetailInput): Promise<PromotionPlanLegacyDetailResult> => {
     requireAccessToken()
     const authorizedAdvertiserIds = tokenProvider.getAdvertiserIds()
     resolveAuthorizedAdvertiserId(input.advertiserId, authorizedAdvertiserIds)
@@ -165,6 +210,19 @@ export const createPromotionPlanService = ({
         fetchedAt: now().toISOString(),
       }),
     )
+  }
+
+  /** 详情 IPC 的稳定出口：只保留快照 data，并统一转换预期失败。 */
+  const getDetailResult = async (input: PromotionPlanDetailInput): Promise<PromotionPlanDetailResult> => {
+    try {
+      const legacyResult = await getDetail(input)
+      if (legacyResult.ok !== true || !legacyResult.snapshot) {
+        return failureResult('PLATFORM_BUSINESS_ERROR', legacyResult.message || '千川平台未返回有效的计划详情。')
+      }
+      return successResult({ snapshot: legacyResult.snapshot })
+    } catch (error) {
+      return resultFromUnknownError(error)
+    }
   }
 
   const validateWriteBaseline = (
@@ -282,7 +340,7 @@ export const createPromotionPlanService = ({
     return [...foundPlans.values()]
   }
 
-  return { list, getDetail, update, getAllForMonitor }
+  return { list, listResult, findPlansForMonitor, getDetail, getDetailResult, update, getAllForMonitor }
 }
 
 export type PromotionPlanService = ReturnType<typeof createPromotionPlanService>

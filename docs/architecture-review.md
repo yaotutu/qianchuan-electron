@@ -273,7 +273,7 @@ Platform Request
 现在多个页面复用 `useWorkspacePlans`，固定发送：
 
 - 当天日期；
-- `status=ALL_INCLUDE_DELETED`；
+- `status=ALL`（普通工作台已不再混入已删除计划）；
 - `page=1`；
 - `page_size=100`；
 - 一个 `scene`。
@@ -293,25 +293,16 @@ Platform Request
 
 ### P1-2 监控调度器需要从“定时器函数”升级为“任务执行器”
 
-当前调度器已经做了账号分组和全局并发保护，但仍然存在长期限制：
+当前调度器已经按广告主分组并做互斥保护，满足当前“手动检查”和“定时检查”的需要。
 
-- 只有一个全局 `checking`，定时检查和用户点击“立即检查”只能互相跳过；
-- 不同广告主使用 `Promise.all` 同时请求，没有统一的并发上限、速率限制和退避策略；
-- 任务执行没有独立的执行记录仓库，只有任务上的 `lastResult`；
-- 应用崩溃或退出时没有任务运行状态、重试和恢复语义；
-- 调度器直接依赖 `MonitorPlanSnapshot`，计划领域与调度基础设施发生反向耦合。
+此前曾考虑拆出 Coordinator、RateLimiter、ExecutionStore 等模块，但这会把尚未发生的需求提前变成代码。当前明确保持简单：
 
-目标是拆成：
+- 同一广告主的并发运行直接返回 `skipped`；
+- 不同广告主可以并行读取；
+- 结果只返回页面当前需要的检查摘要；
+- 任务继续只保存最后一次检查结果，不新增执行记录。
 
-```text
-MonitorScheduler       // 只负责何时触发
-MonitorRunCoordinator   // 负责一次运行的生命周期
-MonitorCheckUseCase     // 负责读取数据、计算规则、写回结果
-PlatformRateLimiter     // 负责平台请求并发/退避
-MonitorExecutionStore   // 保存运行记录和错误上下文
-```
-
-第一阶段不必实现复杂队列，但接口应该先固定，至少支持：取消、手动运行、按广告主互斥、错误重试、运行结果和执行 ID。
+只有当取消、平台重试/限流、历史执行记录或真实维护困难出现时，才重新评估拆分。
 
 ### P1-3 MonitorTask 的本地模型需要去掉平台展示快照的强耦合
 
@@ -498,11 +489,10 @@ Shared Contracts → node:fs / electron / fetch
 
 ### 阶段 D：升级监控执行模型
 
-1. 把 scheduler 从业务规则中拆出；
-2. 增加按广告主的并发/速率限制和有限退避；
-3. 增加运行记录和执行 ID；
-4. 明确手动运行与定时运行的互斥、取消和结果语义；
-5. 再评估是否需要 SQLite。
+1. 保持 scheduler 内的规则判断为纯函数；
+2. 保留按广告主互斥，不提前增加通用并发、重试或队列设施；
+3. 只有出现明确需求时，再评估取消、重试或历史执行记录；
+4. 继续用当前页面真实需要来约束返回结构。
 
 ### 阶段 E：以垂直切片接入新业务
 
@@ -540,3 +530,29 @@ Shared Contracts → node:fs / electron / fetch
 5. 通过函数类型、函数记录和组合根固定依赖组装方式。
 
 服务端新契约稳定后，再由两端一起处理客户端身份、授权尝试和授权记录隔离。这样可以避免先做一套必然推翻的客户端身份模型，同时保证后续业务模块沿着垂直切片新增，不需要反复改动 Token、IPC、平台适配和本地持久化这些底层基础。
+
+## 12. 当前实施进度
+
+截至 2026 年 9 月 8 日，已完成前两条垂直整改切片：
+
+1. 新增 `src/main/application/capabilities/oauth.ts`，用函数记录描述 OAuth 最小能力，Application 不再依赖 HTTP 客户端实现。
+2. `AuthService` 仅依赖 OAuth 能力、系统浏览器打开函数和当前时间函数，保留授权恢复并发合并、主进程 Token 缓存、Token 裁剪和有限刷新行为。
+3. `src/main/infrastructure/oauth-server-client.ts` 负责协议字段归一化和稳定错误映射；`src/main.ts` 负责真实实现组装。
+4. OAuth 客户端测试与 AuthService 测试已拆开，分别验证 HTTP 协议边界和应用行为。
+5. `JsonRecord` 已从 OAuth 客户端模块抽离，避免其他 Infrastructure 模块依赖不相关的 OAuth 实现。
+6. 计划列表 IPC 已切换到统一 `Result<T>`：主进程负责错误分类和输出 Schema 校验，Renderer 只消费 `ok/data/error`；旧 `list()` 仅暂留给监控调度器内部使用。
+7. 计划详情 IPC 已同步切换为 `Result<PromotionPlanDetailData>`；旧详情结构仅保留在主进程 Application/Infrastructure 内部兼容路径。
+8. Renderer 的计划列表与详情 Query Key 已集中为纯函数工厂，并覆盖完整业务查询条件；普通工作台默认列表口径已从 `ALL_INCLUDE_DELETED` 收敛为 `ALL`。
+9. 已补齐共享契约、Application、IPC 和 Query Key 测试，验证未知字段裁剪、输入校验、网络/鉴权/业务错误映射、非法结果阻断和缓存隔离。
+
+这一切片不改变 OAuth 服务端的客户端/用户隔离协议；该问题仍按原计划等待服务端契约稳定后联动处理。Slice 2 已完成：计划列表 IPC 已统一为 `Result<PromotionPlanListData>`，并完成输入/输出白名单、错误分类和边界测试。计划详情 IPC 也已迁移为 `Result<PromotionPlanDetailData>`，旧详情模型只作为主进程内部兼容层保留。Slice 3 已开始：Renderer 的列表与详情 Query Key 已由纯函数工厂集中生成，完整包含广告主、筛选、日期、分页和计划 ID；本轮新增独立的监控候选计划查询用例和 IPC，普通工作台/监控创建页查询参数已提取为纯函数。历史/已删除列表语义与监控执行模型继续按后续切片推进。
+
+## 13. 解决方案设计记录
+
+针对本评审列出的 P0/P1 问题，已建立单独的渐进式解决方案记录：
+
+- 方案文档：`docs/architecture-remediation-plan.md`
+- 函数式编程规则：`docs/functional-architecture-rules.md`
+- 项目强约束：`AGENTS.md`
+
+当前执行原则是：不做一次性大重构，先通过最小垂直切片清理 Application 与 Infrastructure 依赖，并已完成计划列表、计划详情的 IPC Result 稳定化以及 Query Key 缓存隔离；下一步拆分查询语义和监控执行模型。OAuth 客户端身份隔离继续等待配套 OAuth 服务端契约稳定，不在 Electron 侧设计临时方案。

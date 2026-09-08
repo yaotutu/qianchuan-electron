@@ -17,10 +17,14 @@ import {
 import {
   promotionPlanDetailInputSchema,
   promotionPlanListInputSchema,
+  promotionPlanMonitorSelectionInputSchema,
+  promotionPlanListResultSchema,
+  promotionPlanDetailResultSchema,
   type PromotionPlanDetailInput,
   type PromotionPlanListInput,
 } from '../../shared/contracts/promotion-plan'
 import { promotionPlanWriteInputSchema } from '../../shared/contracts/promotion-plan-write'
+import { resultFromUnknownError } from '../../shared/contracts/result'
 import type { AuthService } from '../application/auth-service'
 import type { MonitorTaskService } from '../application/monitor-task-service'
 import type { PromotionPlanService } from '../application/promotion-plan-service'
@@ -54,6 +58,17 @@ export const registerIpcHandlers = ({
       }
     }
 
+  /** 列表接口先完成输入校验，再将所有异常收敛为 Result<T>，不再返回旧式错误对象。 */
+  const handleResult =
+    <T>(callback: (...args: unknown[]) => Promise<T>) =>
+    async (...args: unknown[]) => {
+      try {
+        return await callback(...args)
+      } catch (error) {
+        return resultFromUnknownError(error)
+      }
+    }
+
   ipcMain.handle(
     IPC_CHANNELS.auth.startLogin,
     handle(() => authService.startLogin()),
@@ -72,16 +87,32 @@ export const registerIpcHandlers = ({
   )
   ipcMain.handle(
     IPC_CHANNELS.promotionPlan.list,
-    handle((_event, input: unknown = {}) =>
-      promotionPlanService.list(
-        promotionPlanListInputSchema.parse(input === undefined ? {} : input) as PromotionPlanListInput,
+    handleResult(async (_event, input: unknown = {}) =>
+      promotionPlanListResultSchema.parse(
+        await promotionPlanService.listResult(
+          promotionPlanListInputSchema.parse(input === undefined ? {} : input) as PromotionPlanListInput,
+        ),
+      ),
+    ),
+  )
+  ipcMain.handle(
+    IPC_CHANNELS.promotionPlan.findForMonitor,
+    handleResult(async (_event, input: unknown = {}) =>
+      promotionPlanListResultSchema.parse(
+        await promotionPlanService.findPlansForMonitor(
+          promotionPlanMonitorSelectionInputSchema.parse(input === undefined ? {} : input),
+        ),
       ),
     ),
   )
   ipcMain.handle(
     IPC_CHANNELS.promotionPlan.detail,
-    handle((_event, input: unknown) =>
-      promotionPlanService.getDetail(promotionPlanDetailInputSchema.parse(input) as PromotionPlanDetailInput),
+    handleResult(async (_event, input: unknown) =>
+      promotionPlanDetailResultSchema.parse(
+        await promotionPlanService.getDetailResult(
+          promotionPlanDetailInputSchema.parse(input) as PromotionPlanDetailInput,
+        ),
+      ),
     ),
   )
   ipcMain.handle(

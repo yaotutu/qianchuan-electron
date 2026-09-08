@@ -38,7 +38,7 @@ let monitorScheduler: ReturnType<typeof createMonitorScheduler> | null = null
 app.whenReady().then(async () => {
   const oauthServerClient = createOAuthServerClient({ baseUrl: oauthServerUrl })
   const authService = createAuthService({
-    client: oauthServerClient,
+    oauth: oauthServerClient,
     openExternal: (url) => shell.openExternal(url),
   })
 

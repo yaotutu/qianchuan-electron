@@ -3,12 +3,13 @@ import {
   authorizationSchema,
   healthSchema,
   promotionPlanDetailResultSchema,
-  promotionPlanResultSchema,
+  promotionPlanListResultSchema,
   monitorTaskListResultSchema,
   monitorTaskMutationResultSchema,
   monitorTaskRunResultSchema,
   type PromotionPlanDetailInput,
   type PromotionPlanListInput,
+  type PromotionPlanMonitorSelectionInput,
   promotionPlanWriteInputSchema,
   promotionPlanWriteResultSchema,
   type PromotionPlanWriteInput,
@@ -61,7 +62,11 @@ export const qianchuanApi = {
     runBridgeRequest('读取授权结果', async () => authorizationSchema.parse(await getBridge().auth.getLoginStatus())),
   listPromotionPlans: (input: PromotionPlanListInput) =>
     runBridgeRequest('读取商品投放计划', async () =>
-      promotionPlanResultSchema.parse(await getBridge().promotionMonitor.listPlans(input)),
+      promotionPlanListResultSchema.parse(await getBridge().promotionMonitor.listPlans(input)),
+    ),
+  findPlansForMonitor: (input: PromotionPlanMonitorSelectionInput) =>
+    runBridgeRequest('读取监控候选计划', async () =>
+      promotionPlanListResultSchema.parse(await getBridge().promotionMonitor.findPlansForMonitor(input)),
     ),
   getPromotionPlanDetail: (input: PromotionPlanDetailInput) =>
     runBridgeRequest('读取推广计划详情', async () =>

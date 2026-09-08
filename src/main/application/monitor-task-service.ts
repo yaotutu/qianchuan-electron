@@ -44,7 +44,10 @@ export const createMonitorTaskService = ({ store, scheduler }: MonitorTaskServic
     deletedIds: await store.removeMany(taskIds),
   }),
   runNow: async (advertiserId: string) => {
-    const result = await scheduler.runOnce({ force: true, advertiserId: String(advertiserId || '').trim() })
+    const result = await scheduler.runOnce({
+      force: true,
+      advertiserId: String(advertiserId || '').trim(),
+    })
     return { ok: true as const, status: result.skipped ? ('busy' as const) : ('checked' as const), ...result }
   },
 })

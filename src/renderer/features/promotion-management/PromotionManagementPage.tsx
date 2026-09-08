@@ -21,7 +21,7 @@ export const PromotionManagementPage = ({
   const [keyword, setKeyword] = useState('')
   const [status, setStatus] = useState('ALL')
   const [detailPlan, setDetailPlan] = useState<PromotionPlan | null>(null)
-  const plans = (query.data?.plans || []).filter((plan) => {
+  const plans = (query.data?.ok === true ? query.data.data.plans : []).filter((plan) => {
     const text =
       `${plan.name || ''} ${plan.id} ${(plan.products || []).map((item) => item.name).join(' ')}`.toLocaleLowerCase(
         'zh-CN',
@@ -87,7 +87,7 @@ export const PromotionManagementPage = ({
           pending={query.isPending}
           error={query.isError}
           ok={query.data?.ok}
-          message={query.data?.message}
+          message={query.data?.ok === false ? query.data.error.message : undefined}
           empty={!plans.length}
           onRetry={() => void query.refetch()}
         >
