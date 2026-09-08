@@ -54,14 +54,13 @@ export const MonitorCreatePage = ({ advertiserId, accounts, onAdvertiserChange, 
     queryKey: ['promotion-monitor', 'create-plans', advertiserId],
     queryFn: () =>
       qianchuanApi.listPromotionPlans({
-        advertiser_id: advertiserId,
+        advertiserId,
         keyword: '',
         status: 'ALL',
         scene: 'UNI_PROJECT',
-        start_date: '',
-        end_date: '',
+        dateRange: {},
         page: 1,
-        page_size: 100,
+        pageSize: 100,
       }),
     enabled: Boolean(advertiserId),
   })

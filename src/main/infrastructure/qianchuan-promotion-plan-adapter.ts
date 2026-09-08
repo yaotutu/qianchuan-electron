@@ -28,26 +28,22 @@ import {
 
 const QIANCHUAN_API_ORIGIN = 'https://api.oceanengine.com'
 
-const filtersToParams = (filters: PromotionPlanPlatformListInput['filters']): Record<string, string | undefined> => {
-  const params: Record<string, string | undefined> = {}
-  const allowedKeys = [
-    'advertiser_id',
-    'keyword',
-    'status',
-    'scene',
-    'start_date',
-    'end_date',
-    'page',
-    'page_size',
-  ] as const
-  allowedKeys.forEach((key) => {
-    const value = filters[key]
-    if ((typeof value === 'string' || typeof value === 'number') && String(value).trim()) {
-      params[key] = String(value).trim()
-    }
-  })
-  return params
-}
+/**
+ * 把应用查询模型映射成平台边界使用的参数名。
+ *
+ * 这是整个客户端唯一允许出现这组平台 snake_case 查询字段的地方之一，
+ * 页面、preload 和应用服务都不应为了调用接口而提前了解这些命名。
+ */
+const queryToPlatformParams = (query: PromotionPlanPlatformListInput['query']): Record<string, string | undefined> => ({
+  advertiser_id: query.advertiserId,
+  keyword: query.keyword,
+  status: query.status,
+  scene: query.scene,
+  start_date: query.dateRange.startDate,
+  end_date: query.dateRange.endDate,
+  page: String(query.pagination.page),
+  page_size: String(query.pagination.pageSize),
+})
 
 /**
  * 仅识别明确的 Access Token 失效错误，避免业务失败被错误重试。
@@ -62,8 +58,8 @@ export const createQianchuanPromotionPlanAdapter = ({
 }: {
   apiClient: QianchuanApiClient
 }): PromotionPlanPlatformCapabilities => ({
-  list: async ({ accessToken, filters, authorizedAdvertiserIds, now }) => {
-    const query = parseProductPlanQuery(filtersToParams(filters), authorizedAdvertiserIds, now)
+  list: async ({ accessToken, query: input, authorizedAdvertiserIds, now }) => {
+    const query = parseProductPlanQuery(queryToPlatformParams(input), authorizedAdvertiserIds, now)
     const payload = await apiClient.request(buildProductPlanListUrl(query), accessToken, '获取商品投放计划')
     return normalizeProductPlanResponse(payload, query)
   },

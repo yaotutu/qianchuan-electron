@@ -29,7 +29,14 @@ describe('千川商品计划平台适配器', () => {
     const result = await adapter.list({
       accessToken: 'access-token',
       authorizedAdvertiserIds: ['186001'],
-      filters: { advertiser_id: '186001', page: 1, page_size: 20, status: 'ALL' },
+      query: {
+        advertiserId: '186001',
+        keyword: '',
+        status: 'ALL',
+        scene: 'UNI_PROJECT',
+        dateRange: { startDate: '2026-09-01', endDate: '2026-09-07' },
+        pagination: { page: 1, pageSize: 20 },
+      },
       now: () => Date.parse('2026-09-07T12:00:00.000Z'),
     })
 
@@ -45,6 +52,11 @@ describe('千川商品计划平台适配器', () => {
       'access-token',
       '获取商品投放计划',
     )
+    const requestedUrl = new URL(request.mock.calls[0]?.[0] as string)
+    expect(requestedUrl.searchParams.get('advertiser_id')).toBe('186001')
+    expect(requestedUrl.searchParams.get('page_size')).toBe('20')
+    expect(requestedUrl.searchParams.get('start_time')).toBe('2026-09-01 00:00:00')
+    expect(requestedUrl.searchParams.get('end_time')).toBe('2026-09-07 23:59:59')
   })
 
   it('负责把详情和白名单写命令映射到平台请求', async () => {

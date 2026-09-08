@@ -13,17 +13,18 @@ import type {
   PromotionPlanDetailInput,
   PromotionPlanDetailResult,
   PromotionPlanDetailSnapshot,
-  PromotionPlanFilters,
+  PromotionPlanListInput,
 } from '../../shared/contracts/promotion-plan'
 import type { PromotionPlanWriteInput, PromotionPlanWriteResult } from '../../shared/contracts/promotion-plan-write'
 import { buildPromotionPlanWritePreflight } from '../../shared/domain/promotion-plan-write-preflight'
 import type {
   MonitorPlanSnapshot,
+  PromotionPlanListQuery,
   PromotionPlanPlatformCapabilities,
   PromotionPlanTokenProvider,
 } from './capabilities/promotion-plan'
 
-type PromotionPlanQuery = Partial<PromotionPlanFilters>
+type PromotionPlanQuery = PromotionPlanListInput
 
 export type TokenProvider = PromotionPlanTokenProvider
 
@@ -114,16 +115,37 @@ export const createPromotionPlanService = ({
     if (!accessToken) throw new Error('当前未登录，请先完成巨量千川授权。')
   }
 
-  const list = async (filters: PromotionPlanQuery = {}) => {
+  /**
+   * 把跨进程输入归一化为应用查询模型。
+   *
+   * 空字符串不代表有效日期或关键词：这里统一转成 undefined，避免平台边界
+   * 把页面占位值当作日期解析，从而导致“明明有计划但列表为空”的假失败。
+   */
+  const normalizeListQuery = (input: PromotionPlanQuery, advertiserId: string): PromotionPlanListQuery => ({
+    advertiserId,
+    keyword: input.keyword?.trim() ?? '',
+    status: input.status?.trim() || 'ALL',
+    scene: input.scene?.trim() || 'UNI_PROJECT',
+    dateRange: {
+      startDate: input.dateRange?.startDate?.trim() || undefined,
+      endDate: input.dateRange?.endDate?.trim() || undefined,
+    },
+    pagination: {
+      page: input.page ?? 1,
+      pageSize: input.pageSize ?? 20,
+    },
+  })
+
+  const list = async (input: PromotionPlanQuery = {}) => {
     requireAccessToken()
     const authorizedAdvertiserIds = tokenProvider.getAdvertiserIds()
-    const advertiserId = resolveAuthorizedAdvertiserId(filters.advertiser_id, authorizedAdvertiserIds)
-    const normalizedFilters = { ...filters, advertiser_id: advertiserId }
+    const advertiserId = resolveAuthorizedAdvertiserId(input.advertiserId, authorizedAdvertiserIds)
+    const query = normalizeListQuery(input, advertiserId)
 
     return requestWithAccessTokenRefresh((accessToken) =>
       platform.list({
         accessToken,
-        filters: normalizedFilters,
+        query,
         authorizedAdvertiserIds,
         now: () => now().getTime(),
       }),
@@ -240,13 +262,12 @@ export const createPromotionPlanService = ({
 
     do {
       const result = await list({
-        advertiser_id: advertiserId,
+        advertiserId,
         status: 'ALL',
         scene: 'UNI_PROJECT',
-        start_date: today,
-        end_date: today,
+        dateRange: { startDate: today, endDate: today },
         page,
-        page_size: 100,
+        pageSize: 100,
       })
       const pagePlans = Array.isArray(result.plans) ? result.plans : []
       pagePlans.forEach((plan) => {

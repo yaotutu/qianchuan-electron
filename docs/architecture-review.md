@@ -224,24 +224,34 @@ type Result<T> =
 
 这里的目标不是让 Renderer 知道平台所有错误，而是让它稳定知道“要不要重试、是否需要重新授权、是否需要刷新、是否需要用户确认”。
 
-### P0-4 平台模型、应用模型和页面模型混在一起
+### P0-4 平台模型、应用模型和页面模型混在一起（已完成第一阶段）
 
-当前 `PromotionPlanFilters` 仍然使用 `advertiser_id`、`start_date`、`page_size` 等平台字段命名，并同时承担 IPC 输入、应用查询和平台请求参数的职责。
+此前 `PromotionPlanFilters` 使用 `advertiser_id`、`start_date`、`page_size` 等平台字段命名，
+同时承担 IPC 输入、应用查询和平台请求参数的职责，导致页面被迫了解巨量 OpenAPI 的命名。
 
-这会让未来的分页、数据报表、乘方计划和监控查询互相污染。建议明确三层模型：
+2026 年 9 月 8 日已完成第一阶段拆分：
+
+- Renderer/IPC 使用 `PromotionPlanListInput`，统一使用 `advertiserId`、`dateRange.startDate`、`dateRange.endDate`、`pageSize`；
+- Application 使用完整的 `PromotionPlanListQuery`，由应用服务负责广告主归属检查、默认值和空字符串归一化；
+- Infrastructure 适配器在唯一边界将应用查询映射为平台 `advertiser_id`、`start_date`、`page_size` 等参数；
+- 旧的 `PromotionPlanFilters` 和 Renderer snake_case 查询入口已删除，不保留兼容路径。
+
+这会让未来的分页、数据报表、乘方计划和监控查询互相污染。三层模型固定为：
 
 ```text
 Renderer DTO
   PromotionPlanListInput { advertiserId, scene, dateRange, page }
 
 Application Query
-  PromotionPlanListQuery { advertiserId, scene, dateRange, status, pagination }
+  PromotionPlanListQuery { advertiserId, scene, dateRange, status, pagination: { page, pageSize } }
 
 Platform Request
   ProductPlanListRequest { advertiser_id, start_date, end_date, ... }
 ```
 
 只允许 Infrastructure 做 Application Query → Platform Request 的映射。平台字段不能反向泄漏到 Renderer。
+
+后续新增计划查询必须复用上述边界，不得在 Renderer 或 IPC 中重新定义平台字段别名。
 
 ## 5. 用户确认的暂缓项
 

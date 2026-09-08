@@ -1,7 +1,6 @@
 import type {
   PromotionPlanDetailInput,
   PromotionPlanDetailResult,
-  PromotionPlanFilters,
   PromotionPlanResult,
 } from '../../../shared/contracts/promotion-plan'
 import type {
@@ -24,10 +23,31 @@ export type MonitorPlanSnapshot = {
   }
 }
 
-/** 计划列表查询的应用边界输入。平台字段解析由基础设施适配器完成。 */
+/**
+ * 应用层已经归一化的计划列表查询。
+ *
+ * 与 Renderer DTO 分开后，应用服务可以在这里补齐默认值、清洗空字符串，
+ * 而平台适配器只接收稳定的业务查询，不再知道页面传入的可选字段结构。
+ */
+export type PromotionPlanListQuery = {
+  advertiserId: string
+  keyword: string
+  status: string
+  scene: string
+  dateRange: {
+    startDate?: string
+    endDate?: string
+  }
+  pagination: {
+    page: number
+    pageSize: number
+  }
+}
+
+/** 计划列表的平台能力输入。平台字段转换由基础设施适配器完成。 */
 export type PromotionPlanPlatformListInput = {
   accessToken: string
-  filters: Partial<PromotionPlanFilters>
+  query: PromotionPlanListQuery
   authorizedAdvertiserIds: string[]
   now: () => number
 }

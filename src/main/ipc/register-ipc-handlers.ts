@@ -16,9 +16,9 @@ import {
 } from '../../shared/contracts/monitor-task'
 import {
   promotionPlanDetailInputSchema,
-  promotionPlanFiltersSchema,
+  promotionPlanListInputSchema,
   type PromotionPlanDetailInput,
-  type PromotionPlanFilters,
+  type PromotionPlanListInput,
 } from '../../shared/contracts/promotion-plan'
 import { promotionPlanWriteInputSchema } from '../../shared/contracts/promotion-plan-write'
 import type { AuthService } from '../application/auth-service'
@@ -72,9 +72,9 @@ export const registerIpcHandlers = ({
   )
   ipcMain.handle(
     IPC_CHANNELS.promotionPlan.list,
-    handle((_event, filters: unknown = {}) =>
+    handle((_event, input: unknown = {}) =>
       promotionPlanService.list(
-        promotionPlanFiltersSchema.parse(filters === undefined ? {} : filters) as Partial<PromotionPlanFilters>,
+        promotionPlanListInputSchema.parse(input === undefined ? {} : input) as PromotionPlanListInput,
       ),
     ),
   )

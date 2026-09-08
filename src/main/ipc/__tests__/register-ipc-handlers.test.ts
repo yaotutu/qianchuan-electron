@@ -72,8 +72,8 @@ describe('IPC 输入边界', () => {
       },
     })
 
-    await getHandler(IPC_CHANNELS.promotionPlan.list)({}, { advertiser_id: '186001', unsafe: 'value' })
-    expect(list).toHaveBeenCalledWith({ advertiser_id: '186001' })
+    await getHandler(IPC_CHANNELS.promotionPlan.list)({}, { advertiserId: '186001', unsafe: 'value' })
+    expect(list).toHaveBeenCalledWith({ advertiserId: '186001' })
   })
 })
 

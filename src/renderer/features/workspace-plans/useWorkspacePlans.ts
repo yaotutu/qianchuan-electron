@@ -22,14 +22,13 @@ export const useWorkspacePlans = (advertiserId: string, scene: WorkspacePlanScen
     queryKey: ['workspace-plans', advertiserId, scene, date],
     queryFn: () =>
       qianchuanApi.listPromotionPlans({
-        advertiser_id: advertiserId,
+        advertiserId,
         keyword: '',
         status: 'ALL_INCLUDE_DELETED',
         scene,
-        start_date: date,
-        end_date: date,
+        dateRange: { startDate: date, endDate: date },
         page: 1,
-        page_size: 100,
+        pageSize: 100,
       }),
     enabled: Boolean(advertiserId),
   })

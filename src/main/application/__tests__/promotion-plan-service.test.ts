@@ -120,8 +120,8 @@ const tokenInvalidError = () => Object.assign(new Error('Token 失效'), { token
 
 describe('商品投放计划应用服务', () => {
   it('按页读取监控快照，并在找到全部目标计划后停止', async () => {
-    const list = vi.fn(async ({ filters }: Parameters<PromotionPlanPlatformCapabilities['list']>[0]) => {
-      const page = filters.page
+    const list = vi.fn(async ({ query }: Parameters<PromotionPlanPlatformCapabilities['list']>[0]) => {
+      const page = query.pagination.page
       if (page === 1) {
         return createListResult(1, [
           { id: '101', advertiserId: '186001', name: '计划一', budgetYuan: 200, metrics: {} },
@@ -143,7 +143,18 @@ describe('商品投放计划应用服务', () => {
     expect(list).toHaveBeenCalledTimes(2)
     expect(list).toHaveBeenNthCalledWith(
       1,
-      expect.objectContaining({ accessToken: 'test-access-token', authorizedAdvertiserIds: ['186001'] }),
+      expect.objectContaining({
+        accessToken: 'test-access-token',
+        authorizedAdvertiserIds: ['186001'],
+        query: {
+          advertiserId: '186001',
+          keyword: '',
+          status: 'ALL',
+          scene: 'UNI_PROJECT',
+          dateRange: { startDate: '2026-09-07', endDate: '2026-09-07' },
+          pagination: { page: 1, pageSize: 100 },
+        },
+      }),
     )
   })
 
@@ -159,7 +170,7 @@ describe('商品投放计划应用服务', () => {
     })
     const service = createPromotionPlanService({ platform, tokenProvider })
 
-    await expect(service.list({ advertiser_id: '186001' })).resolves.toMatchObject({ plans: [{ id: '9001' }] })
+    await expect(service.list({ advertiserId: '186001' })).resolves.toMatchObject({ plans: [{ id: '9001' }] })
     expect(list.mock.calls.map(([input]) => input.accessToken)).toEqual([
       'expired-access-token',
       'refreshed-access-token',
@@ -174,7 +185,7 @@ describe('商品投放计划应用服务', () => {
     const tokenProvider = createMockTokenProvider()
     const service = createPromotionPlanService({ platform: createMockPlatform({ list }), tokenProvider })
 
-    await expect(service.list({ advertiser_id: '186001' })).rejects.toThrow('预算不足')
+    await expect(service.list({ advertiserId: '186001' })).rejects.toThrow('预算不足')
     expect(tokenProvider.refreshAccessToken).not.toHaveBeenCalled()
   })
 
@@ -185,7 +196,7 @@ describe('商品投放计划应用服务', () => {
     const tokenProvider = createMockTokenProvider({ accessToken: 'expired-access-token', refreshedAccessToken: null })
     const service = createPromotionPlanService({ platform: createMockPlatform({ list }), tokenProvider })
 
-    await expect(service.list({ advertiser_id: '186001' })).rejects.toThrow('Token 失效')
+    await expect(service.list({ advertiserId: '186001' })).rejects.toThrow('Token 失效')
     expect(list).toHaveBeenCalledTimes(1)
     expect(tokenProvider.refreshAccessToken).toHaveBeenCalledTimes(1)
   })

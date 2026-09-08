@@ -1,31 +1,32 @@
 import { z } from 'zod'
 
-export type PromotionPlanFilters = {
-  advertiser_id: string
-  keyword: string
-  status: string
-  scene: string
-  start_date: string
-  end_date: string
-  page: number
-  page_size: number
-}
-
 const ipcQueryText = z.string().max(500)
 
-/** 计划查询 IPC 的白名单字段，只允许页面传递已声明的筛选条件。 */
-export const promotionPlanFiltersSchema = z
+/**
+ * Renderer 到主进程的计划列表输入。
+ *
+ * 这里故意使用业务语义命名，不把巨量 OpenAPI 的 snake_case 字段泄露到页面、
+ * preload 或 IPC。平台字段转换只允许发生在主进程基础设施适配器边界。
+ */
+export const promotionPlanListInputSchema = z
   .object({
-    advertiser_id: z.string().max(128).optional(),
+    advertiserId: z.string().trim().max(128).optional(),
     keyword: ipcQueryText.optional(),
     status: z.string().max(128).optional(),
     scene: z.string().max(128).optional(),
-    start_date: z.string().max(32).optional(),
-    end_date: z.string().max(32).optional(),
+    dateRange: z
+      .object({
+        startDate: z.string().max(32).optional(),
+        endDate: z.string().max(32).optional(),
+      })
+      .strip()
+      .optional(),
     page: z.number().int().min(1).max(10_000).optional(),
-    page_size: z.number().int().min(1).max(100).optional(),
+    pageSize: z.number().int().min(1).max(100).optional(),
   })
   .strip()
+
+export type PromotionPlanListInput = z.infer<typeof promotionPlanListInputSchema>
 
 export const productSchema = z
   .object({
@@ -82,8 +83,6 @@ export const promotionPlanResultSchema = z
       .object({
         startDate: z.string().optional(),
         endDate: z.string().optional(),
-        start_date: z.string().optional(),
-        end_date: z.string().optional(),
       })
       .passthrough()
       .optional(),

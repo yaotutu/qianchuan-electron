@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { authorizationSchema, monitorTaskListResultSchema, promotionPlanResultSchema } from '../index'
+import {
+  authorizationSchema,
+  monitorTaskListResultSchema,
+  promotionPlanListInputSchema,
+  promotionPlanResultSchema,
+} from '../index'
 
 describe('Electron 共享契约', () => {
   it('把数字广告主 ID 统一转成字符串', () => {
@@ -14,6 +19,15 @@ describe('Electron 共享契约', () => {
   it('保留计划业务字段并提供空列表默认值', () => {
     const result = promotionPlanResultSchema.parse({ ok: true, page: { total: 0 } })
     expect(result.plans).toEqual([])
+  })
+
+  it('计划列表输入只接受业务字段，不兼容平台 snake_case 查询字段', () => {
+    const result = promotionPlanListInputSchema.parse({
+      advertiserId: '186001',
+      dateRange: { startDate: '2026-09-01', unsafe: 'drop' },
+      advertiser_id: 'legacy-field',
+    })
+    expect(result).toEqual({ advertiserId: '186001', dateRange: { startDate: '2026-09-01' } })
   })
 
   it('为缺少字段的监控列表提供安全默认值', () => {
