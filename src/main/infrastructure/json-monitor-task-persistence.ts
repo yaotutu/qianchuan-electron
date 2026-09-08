@@ -3,7 +3,7 @@ import path from 'node:path'
 import { z } from 'zod'
 
 import { monitorTaskSchema, type MonitorTask } from '../../shared/contracts/monitor-task'
-import type { MonitorTaskRepository } from '../application/ports/monitor-task-repository'
+import type { MonitorTaskPersistence } from '../application/capabilities/monitor-task-persistence'
 
 const monitorTaskFileSchema = z.object({
   version: z.literal(1),
@@ -19,10 +19,10 @@ const parseFile = (content: string): MonitorTask[] => {
 }
 
 /**
- * JSON Repository 仅负责磁盘格式和原子写入，不包含任务筛选、校验或调度规则。
+ * JSON 持久化适配器仅负责磁盘格式和原子写入，不包含任务筛选、校验或调度规则。
  * 文件中只保存本产品的监控任务，不保存 Access Token、Secret、Cookie 等平台凭据。
  */
-export const createJsonMonitorTaskRepository = (filePath: string): MonitorTaskRepository => ({
+export const createJsonMonitorTaskPersistence = (filePath: string): MonitorTaskPersistence => ({
   readAll: async () => {
     try {
       return parseFile(await readFile(filePath, 'utf8'))

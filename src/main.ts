@@ -6,7 +6,7 @@ import { createMonitorTaskService } from './main/application/monitor-task-servic
 import { createPromotionPlanService } from './main/application/promotion-plan-service'
 import { createQianchuanApiClient } from './main/infrastructure/qianchuan-api-client'
 import { notifyMonitorTask } from './main/infrastructure/electron-monitor-notifier'
-import { createJsonMonitorTaskRepository } from './main/infrastructure/json-monitor-task-repository'
+import { createJsonMonitorTaskPersistence } from './main/infrastructure/json-monitor-task-persistence'
 import { createOAuthServerClient } from './main/infrastructure/oauth-server-client'
 import { registerIpcHandlers } from './main/ipc/register-ipc-handlers'
 import { createMonitorScheduler } from './main/monitor-scheduler'
@@ -50,10 +50,10 @@ app.whenReady().then(async () => {
     tokenProvider: authService,
   })
 
-  const monitorTaskRepository = createJsonMonitorTaskRepository(
+  const monitorTaskPersistence = createJsonMonitorTaskPersistence(
     path.join(app.getPath('userData'), 'monitor-tasks.json'),
   )
-  const monitorTaskStore = createMonitorTaskStore(monitorTaskRepository)
+  const monitorTaskStore = createMonitorTaskStore(monitorTaskPersistence)
 
   monitorScheduler = createMonitorScheduler({
     store: monitorTaskStore,
@@ -63,7 +63,7 @@ app.whenReady().then(async () => {
       BrowserWindow.getAllWindows().forEach((window) => window.webContents.send(IPC_CHANNELS.monitorTask.changed))
     },
   })
-  const monitorTaskService = createMonitorTaskService(monitorTaskStore, monitorScheduler)
+  const monitorTaskService = createMonitorTaskService({ store: monitorTaskStore, scheduler: monitorScheduler })
 
   registerIpcHandlers({ authService, promotionPlanService, monitorTaskService })
   void createMainWindow(mainWindowOptions)

@@ -31,8 +31,15 @@ describe('监控任务应用服务', () => {
       removeMany: vi.fn(async () => ['task-1']),
       setManyStatus: vi.fn(async () => [{ ...task, status: 'PAUSED' as const }]),
     }
-    const runOnce = vi.fn(async () => ({ checkedCount: 1, skipped: false }))
-    const service = createMonitorTaskService(store, { runOnce })
+    const runOnce = vi.fn(async () => ({
+      checkedCount: 1,
+      triggeredCount: 0,
+      normalCount: 1,
+      errorCount: 0,
+      dataMissingCount: 0,
+      skipped: false,
+    }))
+    const service = createMonitorTaskService({ store, scheduler: { runOnce } })
 
     await expect(service.list({ page: 1 })).resolves.toMatchObject({ ok: true, status: 'ready' })
     await expect(service.delete('task-1')).resolves.toEqual({
@@ -52,14 +59,28 @@ describe('监控任务应用服务', () => {
       removeMany: vi.fn(),
       setManyStatus: vi.fn(),
     }
-    const service = createMonitorTaskService(store, {
-      runOnce: async () => ({ checkedCount: 0, skipped: true }),
+    const service = createMonitorTaskService({
+      store,
+      scheduler: {
+        runOnce: async () => ({
+          checkedCount: 0,
+          triggeredCount: 0,
+          normalCount: 0,
+          errorCount: 0,
+          dataMissingCount: 0,
+          skipped: true,
+        }),
+      },
     })
 
     await expect(service.runNow('186001')).resolves.toEqual({
       ok: true,
       status: 'busy',
       checkedCount: 0,
+      triggeredCount: 0,
+      normalCount: 0,
+      errorCount: 0,
+      dataMissingCount: 0,
       skipped: true,
     })
   })

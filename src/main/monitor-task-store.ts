@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import type { MonitorTaskRepository } from './application/ports/monitor-task-repository'
+import type { MonitorTaskPersistence } from './application/capabilities/monitor-task-persistence'
 
 import type {
   MonitorMetric,
@@ -158,21 +158,21 @@ export const filterMonitorTasks = (
 
 /**
  * 监控任务 Store 承担本地业务规则和读改写串行化。
- * 它只依赖持久化端口，因此未来切换 SQLite 时无需改动 IPC、应用服务或调度器。
+ * 它只依赖持久化能力，因此未来切换 SQLite 时无需改动 IPC、应用服务或调度器。
  */
-export const createMonitorTaskStore = (repository: MonitorTaskRepository, dependencies: StoreDependencies = {}) => {
+export const createMonitorTaskStore = (persistence: MonitorTaskPersistence, dependencies: StoreDependencies = {}) => {
   const now = dependencies.now ?? (() => new Date())
   const createId = dependencies.createId ?? randomUUID
   let mutationQueue: Promise<unknown> = Promise.resolve()
 
-  const readAll = () => repository.readAll()
+  const readAll = () => persistence.readAll()
 
   /** 串行化所有读改写操作，避免两个 IPC 同时提交时互相覆盖。 */
   const mutate = <T>(operation: (tasks: MonitorTask[]) => Promise<{ tasks: MonitorTask[]; result: T }>) => {
     const pending = mutationQueue.then(async () => {
       const current = await readAll()
       const next = await operation(current)
-      await repository.replaceAll(next.tasks)
+      await persistence.replaceAll(next.tasks)
       return next.result
     })
     mutationQueue = pending.catch(() => undefined)

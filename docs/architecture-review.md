@@ -146,7 +146,7 @@ src/main/application/
   auth/
   promotion-plans/
   monitor-tasks/
-  ports/
+  capabilities/
 
 src/main/infrastructure/
   oauth/
@@ -171,9 +171,9 @@ type PromotionPlanGateway = {
   update: (command: PromotionPlanUpdateCommand) => Promise<PromotionPlanUpdateResult>
 }
 
-type MonitorTaskRepository = {
-  list: () => Promise<MonitorTask[]>
-  saveAll: (tasks: MonitorTask[]) => Promise<void>
+type MonitorTaskPersistence = {
+  readAll: () => Promise<MonitorTask[]>
+  replaceAll: (tasks: MonitorTask[]) => Promise<void>
 }
 ```
 
@@ -405,7 +405,7 @@ src/
       promotion-plans/
       monitor-tasks/
       reporting/
-      ports/
+      capabilities/
     infrastructure/               # 具体实现
       oauth/
       qianchuan/
@@ -459,12 +459,14 @@ Shared Contracts → node:fs / electron / fetch
 4. 增加 IPC sender 校验，确保只有受信任主窗口可以调用；
 5. 建立统一 `Result<T>` 和错误码，不再向 Renderer 透传任意平台状态。
 
-### 阶段 B：抽离应用层能力函数
+### 阶段 B：抽离非授权业务的应用能力函数
 
-1. 把 OAuth 客户端接口移到 `main/application/ports`；
-2. 把千川计划网关接口移到 `main/application/ports`；
-3. 把监控调度、通知、时钟和任务仓库接口移到 `ports`；
-4. 将平台 URL、请求参数、响应标准化全部留在 `infrastructure/qianchuan`；
+> OAuth 客户端与用户隔离暂不纳入本阶段，等待 OAuth 服务端新契约稳定后再两端联动调整。
+
+1. 将千川计划查询和写入能力逐步改为显式函数记录；
+2. 将监控调度、通知、时钟和任务持久化能力改为显式函数记录；
+3. 将平台 URL、请求参数、响应标准化全部留在 `infrastructure/qianchuan`；
+4. 让应用用例只依赖能力函数，不引用 Infrastructure 具体返回类型；
 5. 让现有测试传入测试函数，而不是 Mock Infrastructure 具体类型。
 
 ### 阶段 C：拆分查询和领域模型
