@@ -22,7 +22,7 @@
 1. **先修复 P0 架构问题，再继续扩展新的业务模块。**
 2. 不做一次性大重构；先建立明确的能力函数、应用用例模型和 IPC 契约，再逐个迁移现有能力。
 3. 计划、数据报表、乘方、监控等后续模块都必须依赖应用层接口，不得直接复用巨量平台字段或基础设施实现。
-4. 当前 Access Token 只放在主进程内存中是符合预期的。应用退出后重新通过 OAuth 服务端 `/oauth/current` 恢复短期 Token，而不是把 Token 写入 Electron 磁盘。这个决策不需要改变。
+4. 产品 Access Token 和巨量 Access Token 只放在主进程内存中。应用退出后通过本地 `safeStorage` 加密保存的产品 Refresh Token 调用 `/auth/refresh`，再按 `authorizationId` 获取巨量短期 Token；Access Token 不写入 Electron 磁盘。
 
 ## 2. 当前真实架构
 
@@ -65,7 +65,7 @@ HTTP Routes
 
 ### 3.1 Token 生命周期方向正确
 
-`Access Token` 在 Electron 主进程内存中缓存，`Refresh Token` 在 OAuth 服务端加密持久化。应用退出时主进程缓存自然消失，下次启动从 OAuth 服务端恢复。这比把 Access Token 写进本地 JSON、Renderer 状态或 localStorage 更安全，也符合短期凭证的生命周期。
+产品 Access Token 和巨量 Access Token 在 Electron 主进程内存中缓存。产品 Refresh Token 通过 Electron `safeStorage` 加密保存，巨量 Refresh Token 仍由 OAuth 服务端加密持久化。应用退出时 Access Token 缓存自然消失，下次启动先恢复产品会话，再获取指定巨量授权的短期 Token。这比把 Access Token 写进本地 JSON、Renderer 状态或 localStorage 更安全，也符合短期凭证的生命周期。
 
 必须继续保持以下规则：
 
@@ -88,26 +88,18 @@ HTTP Routes
 
 ## 4. P0：现在不修，后续一定会返工
 
-### P0-1（暂缓）OAuth 服务端没有真正的客户端身份边界
+### P0-1（已解决）OAuth 服务端产品用户身份边界
 
-当前 OAuth 服务监听 `0.0.0.0`，而 `/oauth/current`、`/oauth/result` 等路由没有 Electron 客户端认证。`/oauth/current` 会读取服务端的“最近一条授权记录”，并向调用者返回短期 Access Token。
+新版服务端已经删除全局当前授权接口。除平台 callback 外，OAuth 尝试、授权列表、指定授权 Token 获取和解绑接口都要求产品用户 Bearer Token，并按产品用户隔离数据。
 
-这带来两个问题：
+Electron 当前实现：
 
-1. 只要能访问服务端端口，就可能调用 `/oauth/current` 获取当前授权的 Access Token；
-2. 服务端的 Token 记录和授权尝试没有绑定到具体设备、安装实例或客户端会话。
-
-这在“本机仅监听回环地址”的开发场景下风险较低，但服务一旦部署到局域网、云服务器或被多个 Electron 客户端共用，就会变成根本性安全问题。后续业务模块越多，越不应该建立在这个身份模型上。
-
-**必须固定的目标：**
-
-- 桌面单机模式默认只监听 `127.0.0.1`；
-- `/oauth/current` 必须绑定到当前客户端会话或安装实例，不再使用全局 `getLatest()` 作为授权主体；
-- `/oauth/result` 的 `attempt_id` 只能被发起该次授权的客户端读取；
-- 如果未来需要远程或多人使用，必须增加明确的客户端认证/配对机制（短期会话凭证、设备密钥或受控反向通道），不能依赖“知道 URL 就能访问”；
-- API 响应中只把短期 Access Token 返回给已认证的 Electron 主进程。
-
-这是配套服务端的**身份与租户边界**。按当前安排，服务端正在调整，这一项暂不在 Electron 侧单独重构；待服务端的新契约稳定后，再由两端配合完成客户端身份、授权尝试和授权记录隔离。
+- 通过 `/auth/login`、`/auth/register` 和 `/auth/refresh` 管理产品会话；
+- 产品 Access Token 只存主进程内存，产品 Refresh Token 通过 `safeStorage` 加密保存；
+- `/oauth/result` 只能读取当前产品用户发起的 `attemptId`；
+- `/oauth/accounts` 只返回当前产品用户的巨量授权；
+- `/oauth/accounts/{authorizationId}/token` 和删除接口同时校验产品用户与授权归属；
+- 不保留任何全局最近授权或旧接口兼容层。
 
 ### P0-2 Application 层直接依赖 Infrastructure 具体实现
 
@@ -519,9 +511,9 @@ Shared Contracts → node:fs / electron / fetch
 
 ## 11. 最终判断
 
-当前不是推倒重来，而是进入“先封边界，再扩业务”的阶段。授权与用户隔离属于 OAuth 服务端正在调整的协作事项，当前明确暂缓，不在 Electron 侧自行设计临时方案。
+当前不是推倒重来，而是进入“边界已收口，按真实需求扩业务”的阶段。新版 OAuth 产品用户会话和多授权隔离已经落地，Electron 不再保留旧接口兼容层。
 
-在服务端契约稳定前，Electron 侧优先处理以下基础边界：
+后续 Electron 侧继续维护以下基础边界：
 
 1. Application 与 Infrastructure 的依赖通过显式函数参数和函数记录隔离；
 2. IPC 错误和 DTO 契约稳定化；

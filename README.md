@@ -1,6 +1,6 @@
 # 电小奇 · 千川 Electron 客户端
 
-当前客户端负责桌面登录交互、千川超级商品卡工作台和本地推广监控。Electron 主进程直接调用巨量官方 `/open_api/...` 接口；独立部署的 `qianchuan-oauth-callback` 只负责 OAuth 授权、Refresh Token 加密持久化和 Access Token 自动刷新。
+当前客户端负责产品账号登录、巨量授权管理、千川超级商品卡工作台和本地推广监控。Electron 主进程直接调用巨量官方 `/open_api/...` 接口；独立部署的 `qianchuan-oauth-callback` 只负责产品用户会话、巨量 OAuth、巨量 Token 安全存储与刷新。
 
 两个项目目前位于同一工作区，后续会拆成两个独立仓库维护。Electron 项目只依赖 OAuth 服务端约定的 HTTP 接口，不建立 monorepo，也不共享运行时包。
 
@@ -32,10 +32,10 @@ npm install
 npm start
 ```
 
-默认连接 `http://127.0.0.1:3100`。如服务端部署在其他地址：
+默认连接本机正在运行的最新版 OAuth 服务 `http://127.0.0.1:3100`。如需连接其他部署环境，可通过环境变量覆盖：
 
 ```bash
-QIANCHUAN_OAUTH_SERVER_URL=https://你的服务端域名 npm start
+QIANCHUAN_OAUTH_SERVER_URL=https://your-oauth-service.example.com npm start
 ```
 
 常用开发命令：
@@ -70,8 +70,9 @@ Electron Main
     │
     ▼
 qianchuan-oauth-callback（独立项目）
-    ├── OAuth 回调与授权尝试
-    └── Access Token 自动刷新与授权恢复
+    ├── 产品用户登录、注册和会话刷新
+    ├── 多巨量授权账号与 OAuth 尝试
+    └── 巨量 Token 安全存储和自动刷新
 
 Electron 主进程直接调用巨量官方 `/open_api/...`；OAuth 服务端不代理任何千川业务请求。
 ```
@@ -80,16 +81,16 @@ Electron 主进程直接调用巨量官方 `/open_api/...`；OAuth 服务端不�
 
 ## 登录流程
 
-1. React 通过 TanStack Query 调用 preload 暴露的健康检查和当前授权接口；
-2. Electron 主进程请求 `/oauth/oceanengine/start`；
-3. 主进程保存服务端返回的 `attemptId`，并使用系统浏览器打开授权 URL；
-4. 巨量回调到独立服务端后，服务端换取并加密保存 Access Token / Refresh Token；
-5. React 通过 Query 定时轮询 `/oauth/result?attempt_id=...`，主进程同时缓存短期 Access Token；
-6. Electron 主进程直接调用巨量官方 `/open_api/...`，Renderer 只收到脱敏后的广告主和计划数据。
+1. React 通过 TanStack Query 调用 preload 暴露的 `/health/ready` 健康检查和产品会话恢复能力；
+2. 用户通过 `/auth/login` 或 `/auth/register` 登录产品账号；产品 Access Token 只保存在主进程内存，产品 Refresh Token 通过 Electron `safeStorage` 加密保存；
+3. Electron 使用产品 Bearer Token 调用 `POST /oauth/oceanengine/start`，保存服务端返回的 `attemptId`，并使用系统浏览器打开授权 URL；
+4. 巨量回调到独立服务端后，服务端换取并加密保存巨量 Access Token / Refresh Token；
+5. React 通过 Query 定时轮询 `/oauth/result?attempt_id=...`，成功后主进程重新读取 `/oauth/accounts`；
+6. 用户选择一个 `authorizationId` 后，主进程调用 `/oauth/accounts/{authorizationId}/token` 获取短期巨量 Access Token，并直接调用巨量官方 `/open_api/...`；Renderer 只收到脱敏后的授权、广告主和计划数据。
 
-应用重启后不会要求用户每天重新授权：主进程启动时请求 `/oauth/current`，服务端读取加密授权并在需要时用 Refresh Token 刷新，再把新的短期 Access Token 返回给主进程。只有 Refresh Token 过期、授权被撤销或权限发生变化时，才需要重新授权。
+应用重启后，主进程使用本地加密的产品 Refresh Token 调用 `/auth/refresh` 恢复产品会话，再加载该用户的巨量授权列表并获取所选授权的短期 Token。只有产品会话或巨量授权失效时，才要求用户重新登录或重新绑定。
 
-Electron Renderer 不接触 App Secret、Access Token、Refresh Token、`auth_code` 或完整授权 URL。Access Token 只在主进程内存中短期存在，不写入磁盘；Refresh Token 永远只在 OAuth 服务端保存和使用。
+Electron Renderer 不接触 App Secret、产品或巨量 Access Token、产品或巨量 Refresh Token、`auth_code` 或完整授权 URL。巨量 Refresh Token 永远只在 OAuth 服务端保存；本地只加密保存产品 Refresh Token。
 
 ## 商品投放计划
 

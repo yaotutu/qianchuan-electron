@@ -1,17 +1,18 @@
 # qianchuan-electron 项目协作约定
 
-> 最后更新：2026-09-08
+> 最后更新：2026-09-09
 >
 > 本文件记录当前仓库的强约束。更完整的函数式架构说明见 `docs/functional-architecture-rules.md`，架构问题与迁移顺序见 `docs/architecture-review.md`。
 
 ## 用户手动添加的规则，优先级最高，禁止修改
+
 - 避免过度设计
 
 ## 1. 项目定位与当前能力
 
 - 本项目是“电小奇 · 千川超级商品卡”的 Electron 桌面客户端。
 - 当前技术栈为 Electron 44、React 18、TypeScript 6、Vite 8、Arco Design、TanStack Query、Zustand、Zod 和 React Router。
-- 当前核心能力包括巨量千川 OAuth 授权恢复、广告主/店铺选择、商品投放计划列表与详情、本地推广监控任务，以及预算和支付 ROI 的受控写入链路。
+- 当前核心能力包括产品用户登录与会话恢复、多巨量千川 OAuth 授权管理、广告主/店铺选择、商品投放计划列表与详情、本地推广监控任务，以及预算和支付 ROI 的受控写入链路。
 - 默认以只读查询和诊断为主。预算、支付 ROI 等真实写操作即使已有代码路径，也必须由用户明确要求并确认具体广告主、计划、字段、目标值和安全方案后才能执行。
 - 当前只允许使用已核实的官方增量接口修改预算和支付 ROI。计划名称、投放时间、启停、删除、复制及其他写操作继续保持关闭，不得根据网页内部接口或猜测字段补齐实现。
 
@@ -69,8 +70,9 @@ Renderer → Preload / IPC Contract → Application Use Cases → Capability Fun
 - 产品业务逻辑优先放在 Electron 主进程，包括监控任务、规则、分组、启停、调度、检查结果和本地持久化。
 - 文件系统、系统浏览器、系统通知、定时调度和其他 Node.js 能力只能由主进程负责。
 - 主进程负责获取短期有效的 Access Token，并直接调用巨量官方 `/open_api/...` 完成业务查询与经确认的写入；不得通过配套 OAuth 服务代理业务接口。
-- 巨量 App Secret、Refresh Token、Cookie 和网页登录凭据只能保存在配套 OAuth 服务端。Access Token 只允许在 Electron 主进程内存中短期持有，不得写入磁盘、日志、仓库、测试夹具或传递给 Renderer。
-- 平台明确返回 Token 失效时，主进程只能重新请求 OAuth 服务 `/oauth/current` 获取刷新后的短期 Token，并对原业务请求做一次有边界重试，禁止无限重试。
+- 巨量 App Secret、巨量 Refresh Token、Cookie 和网页登录凭据只能保存在配套 OAuth 服务端。产品 Access Token 和巨量 Access Token 只允许在 Electron 主进程内存中短期持有，不得写入磁盘、日志、仓库、测试夹具或传递给 Renderer。
+- 产品 Refresh Token 只允许由主进程通过 Electron `safeStorage` 加密保存，用于应用重启后的产品会话恢复；不得传递给 Renderer 或以明文形式落盘。
+- 巨量平台明确返回 Token 失效时，主进程只能使用当前产品会话调用 `/oauth/accounts/{authorizationId}/token` 重新获取指定授权的短期 Access Token，并对原业务请求做一次有边界重试，禁止无限重试。
 - 应用关闭后不保证监控继续运行。只有用户明确要求云端运行、多人共享或 24 小时运行时，才重新评估服务端调度方案。
 
 ### 3.2 Preload 与 IPC
@@ -98,9 +100,11 @@ Renderer → Preload / IPC Contract → Application Use Cases → Capability Fun
 
 ### 3.4 OAuth 服务端
 
-- 配套服务端只负责巨量 OAuth：生成授权入口、接收回调、安全保存 Token、使用 Refresh Token 自动刷新 Access Token，以及通过 `/oauth/current` 返回当前有效授权结果。
-- 登录流程固定为：Electron 请求 `/oauth/oceanengine/start` → 系统浏览器完成授权 → 巨量回调 OAuth 服务 → OAuth 服务安全保存 Token → Electron 查询授权结果。
-- 日常业务流程固定为：Electron 主进程从 `/oauth/current` 获取短期 Access Token → 主进程直接调用巨量官方 `/open_api/...` → 主进程完成校验和业务处理 → 最小 IPC 返回脱敏业务数据。
+- 配套服务端只负责产品用户会话、巨量 OAuth、巨量 Token 安全存储与刷新，以及按当前产品用户列出和管理其巨量授权；不代理巨量业务接口。
+- 产品登录流程固定为：Renderer 通过最小 IPC 提交邮箱和密码 → Electron 主进程调用 `/auth/login` 或 `/auth/register` → 产品 Access Token 仅存主进程内存 → 产品 Refresh Token 通过 `safeStorage` 加密保存。
+- 巨量授权流程固定为：Electron 使用产品 Bearer Token 调用 `POST /oauth/oceanengine/start` → 系统浏览器完成授权 → 巨量回调 OAuth 服务 → OAuth 服务安全保存巨量 Token → Electron 轮询 `/oauth/result?attempt_id=...` 并重新读取 `/oauth/accounts`。
+- 日常业务流程固定为：Electron 主进程使用产品 Bearer Token 调用 `/oauth/accounts/{authorizationId}/token` 获取指定授权的短期巨量 Access Token → 主进程直接调用巨量官方 `/open_api/...` → 主进程完成校验和业务处理 → 最小 IPC 返回脱敏业务数据。
+- 不存在“全局当前授权”；授权列表、授权结果和 Token 获取都必须绑定当前产品用户，客户端切换账号时必须显式使用 `authorizationId`。
 - OAuth 服务端不得承载推广计划查询/修改、监控任务、业务 CRUD、调度策略、规则执行或 UI 状态，也不得新增巨量业务接口的通用转发路由。
 - Electron 项目与 OAuth 项目保持独立仓库和稳定 HTTP 契约，不通过复制源码、共享运行时包或直接读取对方存储形成隐式耦合。
 

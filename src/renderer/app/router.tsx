@@ -1,5 +1,5 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
-import type { AdvertiserAccount, AuthorizationResult } from '../../shared/contracts'
+import type { AdvertiserAccount, AuthState } from '../../shared/contracts'
 import { PromotionMonitorPage } from '../features/promotion-monitor/PromotionMonitorPage'
 import { AccountManagementPage } from '../features/account-management/AccountManagementPage'
 import { PromotionManagementPage } from '../features/promotion-management/PromotionManagementPage'
@@ -13,14 +13,14 @@ import {
 type WorkspaceRoutesProps = {
   accounts: AdvertiserAccount[]
   currentAccountId: string
-  authorization: AuthorizationResult
+  authState: AuthState
 }
 
 /**
  * 工作台业务路由集中管理。
  * HashRouter 适合 Electron file:// 页面，不依赖本地服务器回退配置。
  */
-export const WorkspaceRoutes = ({ accounts, currentAccountId, authorization }: WorkspaceRoutesProps) => {
+export const WorkspaceRoutes = ({ accounts, currentAccountId, authState }: WorkspaceRoutesProps) => {
   return (
     <Routes>
       <Route path="/" element={<Navigate to="/promotion-monitor" replace />} />
@@ -28,10 +28,7 @@ export const WorkspaceRoutes = ({ accounts, currentAccountId, authorization }: W
         path="/promotion-monitor"
         element={<PromotionMonitorPage currentAccountId={currentAccountId} accounts={accounts} />}
       />
-      <Route
-        path="/account-management"
-        element={<AccountManagementPage accounts={accounts} authorization={authorization} />}
-      />
+      <Route path="/account-management" element={<AccountManagementPage accounts={accounts} authState={authState} />} />
       <Route
         path="/promotion-management"
         element={<PromotionManagementPage currentAccountId={currentAccountId} accounts={accounts} />}

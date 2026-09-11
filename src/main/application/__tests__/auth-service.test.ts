@@ -1,15 +1,52 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import type { OAuthCapabilities, OAuthCapabilityError } from '../capabilities/oauth'
+import type { OAuthCapabilities, OAuthCapabilityError, OAuthAuthorizationSummary } from '../capabilities/oauth'
 import { createAuthService } from '../auth-service'
+import type { ProductRefreshTokenStore } from '../capabilities/product-session-store'
+
+const createStore = (initial: string | null = null): ProductRefreshTokenStore => {
+  let value = initial
+  return {
+    read: () => value,
+    write: (next) => {
+      value = next
+    },
+    clear: () => {
+      value = null
+    },
+  }
+}
 
 const createOAuth = (overrides: Partial<OAuthCapabilities> = {}): OAuthCapabilities => ({
+  getHealth: async () => ({ ok: true, status: 'ready', configured: true, databaseConnected: true }),
+  register: async () => ({ ok: true }),
+  login: async () => ({ ok: true }),
+  refreshProductSession: async () => ({ ok: true }),
+  logout: async () => undefined,
   startLogin: async () => ({}),
   getLoginStatus: async () => ({}),
-  getCurrentAuthorization: async () => ({}),
-  getHealth: async () => ({}),
+  listAccounts: async () => ({ ok: true, accounts: [] }),
+  getAccountToken: async () => ({
+    authorizationId: 'authorization-1',
+    status: 'active',
+    advertiserSyncStatus: 'success',
+    user: null,
+    advertiserIds: [],
+    advertiserAccounts: [],
+    accessToken: 'fixture',
+  }),
+  deleteAccount: async () => undefined,
   ...overrides,
 })
+
+const summary: OAuthAuthorizationSummary = {
+  authorizationId: 'authorization-1',
+  status: 'active',
+  advertiserSyncStatus: 'success',
+  user: { id: 'platform-user-1', displayName: '千川用户', email: 'platform@example.com' },
+  advertiserIds: ['186001'],
+  advertiserAccounts: [{ advertiserId: '186001', advertiserName: '测试账户' }],
+}
 
 const createHttpError = (status: number, payloadStatus?: string) => {
   const error = new Error('request failed') as OAuthCapabilityError
@@ -17,204 +54,245 @@ const createHttpError = (status: number, payloadStatus?: string) => {
   return error
 }
 
-describe('授权应用服务', () => {
-  it('发起登录后只向 Renderer 返回安全状态，并使用系统浏览器打开授权页', async () => {
-    const openExternal = vi.fn(async () => undefined)
+describe('新版认证应用服务', () => {
+  it('产品登录后加载自己的巨量授权，并只向 Renderer 返回脱敏状态', async () => {
+    const getAccountToken = vi.fn(async () => ({
+      ...summary,
+      accessToken: 'fixture',
+      accessTokenExpiresAt: '2026-09-08T12:00:00.000Z',
+    }))
     const service = createAuthService({
       oauth: createOAuth({
-        startLogin: async () => ({
+        login: async () => ({
           ok: true,
-          authorizationUrl: 'https://example.com/oauth',
-          attemptId: 'attempt-1',
-          expiresInSeconds: 300,
+          user: { id: 'user-1', email: 'user@example.com', status: 'active' },
+          accessToken: 'fixture',
+          refreshToken: 'fixture',
         }),
+        listAccounts: async () => ({ ok: true, accounts: [summary] }),
+        getAccountToken,
       }),
-      openExternal,
-      now: () => new Date('2026-09-06T01:00:00.000Z'),
+      refreshTokenStore: createStore(),
+      openExternal: async () => undefined,
     })
 
-    await expect(service.startLogin()).resolves.toEqual({
+    await expect(service.login({ email: 'user@example.com', password: 'password' })).resolves.toMatchObject({
       ok: true,
-      status: 'waiting',
-      startedAt: '2026-09-06T01:00:00.000Z',
-      expiresInSeconds: 300,
-      message: '已打开巨量授权页面，请在浏览器中完成授权。',
+      status: 'authenticated',
     })
+    expect(service.getState()).toEqual({
+      productUser: { id: 'user-1', email: 'user@example.com', status: 'active' },
+      oauthAccounts: [summary],
+      selectedAuthorizationId: 'authorization-1',
+      selectedAdvertiserIds: ['186001'],
+      accessTokenExpiresAt: '2026-09-08T12:00:00.000Z',
+    })
+    expect(service.getState()).not.toHaveProperty('accessToken')
+    expect(service.getAccessToken()).toBe('fixture')
+    expect(getAccountToken).toHaveBeenCalledWith('fixture', 'authorization-1')
+  })
+
+  it('发起 OAuth 时使用产品会话 Bearer，并通过系统浏览器打开授权地址', async () => {
+    const openExternal = vi.fn(async () => undefined)
+    const startLogin = vi.fn(async () => ({
+      ok: true,
+      attemptId: 'attempt-1',
+      authorizationUrl: 'https://example.com/oauth',
+    }))
+    const service = createAuthService({
+      oauth: createOAuth({
+        login: async () => ({
+          ok: true,
+          user: { id: 'user-1', email: 'user@example.com', status: 'active' },
+          accessToken: 'fixture',
+          refreshToken: 'fixture',
+        }),
+        startLogin,
+      }),
+      refreshTokenStore: createStore(),
+      openExternal,
+    })
+
+    await service.login({ email: 'user@example.com', password: 'password' })
+    await expect(service.startLogin()).resolves.toMatchObject({ ok: true, status: 'waiting' })
+    expect(startLogin).toHaveBeenCalledWith('fixture')
     expect(openExternal).toHaveBeenCalledWith('https://example.com/oauth')
   })
 
-  it('当前授权只返回 Renderer 需要的字段，Token 原文留在主进程缓存', async () => {
-    const service = createAuthService({
-      oauth: createOAuth({
-        getCurrentAuthorization: async () => ({
-          ok: true,
-          status: 'success',
-          user: { displayName: '测试用户' },
-          token: {
-            accessToken: 'main-process-access-token',
-            accessTokenExpiresAt: '2026-09-07T01:46:07.678Z',
-            refreshTokenExpiresAt: '2026-10-06T01:46:07.678Z',
-            advertiserIds: ['186001'],
-            advertiserAccounts: [{ advertiserId: '186001', advertiserName: '知足好物集' }],
-          },
-        }),
-      }),
-      openExternal: async () => undefined,
-    })
-
-    const result = await service.getCurrentAuthorization()
-
-    expect(result.token).not.toHaveProperty('accessToken')
-    expect(result.token).not.toHaveProperty('refreshToken')
-    if (result.token) {
-      expect(result.token.accessTokenExpiresAt).toBe('2026-09-07T01:46:07.678Z')
-      expect(result.token.advertiserIds).toEqual(['186001'])
-      expect(result.token.advertiserAccounts).toEqual([{ advertiserId: '186001', advertiserName: '知足好物集' }])
-    }
-    expect(service.getAccessToken()).toBe('main-process-access-token')
-    expect(service.getAdvertiserIds()).toEqual(['186001'])
-  })
-
-  it('并发恢复授权时只请求一次 OAuth 服务端，避免重复刷新 Refresh Token', async () => {
-    let resolveRequest: ((value: Awaited<ReturnType<OAuthCapabilities['getCurrentAuthorization']>>) => void) | undefined
-    const getCurrentAuthorization = vi.fn(
+  it('并发恢复产品会话时只刷新一次并加载一次授权列表', async () => {
+    let resolveRefresh: ((value: Awaited<ReturnType<OAuthCapabilities['refreshProductSession']>>) => void) | undefined
+    const refreshProductSession = vi.fn(
       () =>
-        new Promise<Awaited<ReturnType<OAuthCapabilities['getCurrentAuthorization']>>>((resolve) => {
-          resolveRequest = resolve
+        new Promise<Awaited<ReturnType<OAuthCapabilities['refreshProductSession']>>>((resolve) => {
+          resolveRefresh = resolve
         }),
     )
+    const listAccounts = vi.fn(async () => ({ ok: true, accounts: [] }))
     const service = createAuthService({
-      oauth: createOAuth({ getCurrentAuthorization }),
+      oauth: createOAuth({ refreshProductSession, listAccounts }),
+      refreshTokenStore: createStore('fixture'),
       openExternal: async () => undefined,
     })
 
-    const first = service.getCurrentAuthorization()
-    const second = service.getCurrentAuthorization()
-    expect(getCurrentAuthorization).toHaveBeenCalledTimes(1)
-
-    resolveRequest?.({
+    const first = service.restoreSession()
+    const second = service.restoreSession()
+    expect(refreshProductSession).toHaveBeenCalledTimes(1)
+    resolveRefresh?.({
       ok: true,
-      status: 'success',
-      token: {
-        accessToken: 'restored-access-token',
-        advertiserIds: ['186001'],
-      },
+      user: { id: 'user-1', email: 'user@example.com', status: 'active' },
+      accessToken: 'fixture',
+      refreshToken: 'fixture',
     })
 
-    const [firstResult, secondResult] = await Promise.all([first, second])
-    expect(firstResult).toEqual(secondResult)
-    expect(service.getAccessToken()).toBe('restored-access-token')
+    const results = await Promise.all([first, second])
+    expect(results[0]).toEqual(service.getState())
+    expect(results[1]).toEqual(service.getState())
+    expect(listAccounts).toHaveBeenCalledTimes(1)
   })
 
-  it('平台明确拒绝旧 Access Token 时只强制刷新一次，并把新 Token 留在主进程', async () => {
-    const getCurrentAuthorization = vi.fn(async ({ forceRefresh = false } = {}) => {
-      if (forceRefresh) {
-        return {
-          ok: true,
-          status: 'success',
-          token: {
-            accessToken: 'fresh-access-token',
-            advertiserIds: ['186001'],
-          },
-        }
-      }
-      throw new Error('unexpected OAuth request')
+  it('并发产品接口遇到 401 时只轮换一次 Refresh Token', async () => {
+    let refreshCount = 0
+    const listAccounts = vi.fn(async (accessToken: string) => {
+      if (accessToken === 'expired-product-token') throw createHttpError(401, 'unauthorized')
+      return { ok: true, accounts: [] }
     })
-    const service = createAuthService({
-      oauth: createOAuth({ getCurrentAuthorization }),
-      openExternal: async () => undefined,
-    })
-
-    await expect(service.refreshAccessToken()).resolves.toBe('fresh-access-token')
-    expect(getCurrentAuthorization).toHaveBeenCalledTimes(1)
-    expect(getCurrentAuthorization).toHaveBeenCalledWith({ forceRefresh: true })
-    expect(service.getAccessToken()).toBe('fresh-access-token')
-  })
-
-  it('强制刷新失败时清空主进程中的旧 Access Token', async () => {
-    const getCurrentAuthorization = vi.fn(async ({ forceRefresh = false } = {}) => {
-      if (!forceRefresh) return { ok: true, status: 'success', token: { accessToken: 'stale-access-token' } }
-      throw createHttpError(401, 'reauthorization_required')
-    })
-    const service = createAuthService({
-      oauth: createOAuth({ getCurrentAuthorization }),
-      openExternal: async () => undefined,
-    })
-
-    await service.getCurrentAuthorization()
-    await expect(service.refreshAccessToken()).resolves.toBeNull()
-    expect(service.getAccessToken()).toBeNull()
-  })
-
-  it('服务端返回无效授权时也不会向 Renderer 泄露 Refresh Token', async () => {
     const service = createAuthService({
       oauth: createOAuth({
-        getCurrentAuthorization: async () => ({
-          ok: true,
-          status: 'success',
-          token: {
-            accessTokenExpiresAt: '2026-09-07T01:46:07.678Z',
-            advertiserIds: ['186001'],
-          },
-        }),
-      }),
-      openExternal: async () => undefined,
-    })
-
-    const result = await service.getCurrentAuthorization()
-
-    expect(result.token).not.toHaveProperty('refreshToken')
-    if (result.token) {
-      expect(result.token.accessTokenExpiresAt).toBe('2026-09-07T01:46:07.678Z')
-      expect(result.token.advertiserIds).toEqual(['186001'])
-    }
-    expect(service.getAccessToken()).toBeNull()
-  })
-
-  it('把失效授权与服务端能力不完整转换成稳定客户端状态', async () => {
-    const service = createAuthService({
-      oauth: createOAuth({
-        getCurrentAuthorization: async () => {
-          throw createHttpError(401, 'reauthorization_required')
+        refreshProductSession: async () => {
+          refreshCount += 1
+          await new Promise((resolve) => setTimeout(resolve, 5))
+          return {
+            ok: true,
+            user: { id: 'user-1', email: 'user@example.com', status: 'active' },
+            accessToken: `product-token-${refreshCount}`,
+            refreshToken: 'rotated-refresh-token',
+          }
         },
-        getHealth: async () => ({ version: '1.0.0', configured: true, capabilities: ['oauth-attempt-result'] }),
+        listAccounts,
       }),
+      refreshTokenStore: createStore('stored-refresh-token'),
       openExternal: async () => undefined,
     })
 
-    await expect(service.getCurrentAuthorization()).resolves.toMatchObject({
-      ok: false,
-      status: 'reauthorization_required',
+    await service.restoreSession()
+    // 模拟后续两个并发业务请求同时发现产品 Access Token 已失效。
+    listAccounts.mockImplementation(async (accessToken: string) => {
+      if (accessToken === 'product-token-1') throw createHttpError(401, 'unauthorized')
+      return { ok: true, accounts: [] }
     })
-    await expect(service.getHealth()).resolves.toMatchObject({ ok: false, status: 'server_outdated' })
+
+    await Promise.all([service.listAccounts(), service.listAccounts()])
+    expect(refreshCount).toBe(2)
   })
 
-  it('授权轮询请求已过期时清理活动尝试并返回稳定状态', async () => {
-    const getLoginStatus = vi.fn(async () => {
-      throw createHttpError(404)
-    })
+  it('巨量 Token 失效时只按当前 authorizationId 重新获取一次', async () => {
+    const getAccountToken = vi
+      .fn()
+      .mockResolvedValueOnce({ ...summary, accessToken: 'fixture', accessTokenExpiresAt: '2026-09-08T12:00:00.000Z' })
+      .mockResolvedValueOnce({ ...summary, accessToken: 'fixture', accessTokenExpiresAt: '2026-09-08T13:00:00.000Z' })
     const service = createAuthService({
       oauth: createOAuth({
-        startLogin: async () => ({ ok: true, authorizationUrl: 'https://example.com/oauth', attemptId: 'attempt-1' }),
-        getLoginStatus,
+        login: async () => ({
+          ok: true,
+          user: { id: 'user-1', email: 'user@example.com', status: 'active' },
+          accessToken: 'fixture',
+          refreshToken: 'fixture',
+        }),
+        listAccounts: async () => ({ ok: true, accounts: [summary] }),
+        getAccountToken,
       }),
+      refreshTokenStore: createStore(),
       openExternal: async () => undefined,
     })
 
-    await service.startLogin()
-    await expect(service.getLoginStatus()).resolves.toEqual({
-      ok: false,
-      status: 'expired',
-      message: '本次登录请求已经失效，请重新登录。',
-    })
-    await expect(service.getLoginStatus()).resolves.toMatchObject({ ok: true, status: 'idle' })
-    expect(getLoginStatus).toHaveBeenCalledTimes(1)
+    await service.login({ email: 'user@example.com', password: 'password' })
+    await expect(service.refreshAccessToken()).resolves.toBe('fixture')
+    expect(getAccountToken).toHaveBeenCalledTimes(2)
+    expect(getAccountToken).toHaveBeenLastCalledWith('fixture', 'authorization-1')
   })
 
-  it('没有活动登录尝试时不会请求服务端', async () => {
-    const getLoginStatus = vi.fn(async () => ({}))
+  it('指定授权仍在补全或已失效时清空当前平台选择', async () => {
+    const service = createAuthService({
+      oauth: createOAuth({
+        login: async () => ({
+          ok: true,
+          user: { id: 'user-1', email: 'user@example.com', status: 'active' },
+          accessToken: 'fixture',
+          refreshToken: 'fixture',
+        }),
+        listAccounts: async () => ({ ok: true, accounts: [summary] }),
+        getAccountToken: async () => {
+          throw createHttpError(409, 'authorization_pending')
+        },
+      }),
+      refreshTokenStore: createStore(),
+      openExternal: async () => undefined,
+    })
+
+    await expect(service.login({ email: 'user@example.com', password: 'password' })).rejects.toThrow('request failed')
+    expect(service.getAccessToken()).toBeNull()
+    expect(service.getState().selectedAuthorizationId).toBeNull()
+  })
+
+  it('授权轮询返回 202 waiting/processing 时继续保留活动尝试，成功后刷新账号列表', async () => {
+    const getLoginStatus = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true, status: 'processing', attemptId: 'attempt-1' })
+      .mockResolvedValueOnce({ ok: true, status: 'success', attemptId: 'attempt-1', authorization: summary })
+    const listAccounts = vi.fn(async () => ({ ok: true, accounts: [summary] }))
+    const service = createAuthService({
+      oauth: createOAuth({
+        login: async () => ({
+          ok: true,
+          user: { id: 'user-1', email: 'user@example.com', status: 'active' },
+          accessToken: 'fixture',
+          refreshToken: 'fixture',
+        }),
+        startLogin: async () => ({ ok: true, attemptId: 'attempt-1', authorizationUrl: 'https://example.com/oauth' }),
+        getLoginStatus,
+        listAccounts,
+      }),
+      refreshTokenStore: createStore(),
+      openExternal: async () => undefined,
+    })
+
+    await service.login({ email: 'user@example.com', password: 'password' })
+    await service.startLogin()
+    await expect(service.getLoginStatus()).resolves.toMatchObject({ status: 'processing' })
+    await expect(service.getLoginStatus()).resolves.toMatchObject({ status: 'success' })
+    expect(listAccounts).toHaveBeenCalledTimes(2)
+    expect(service.getState().selectedAuthorizationId).toBe('authorization-1')
+  })
+
+  it('授权结果明确失败时结束轮询并返回稳定状态', async () => {
+    const service = createAuthService({
+      oauth: createOAuth({
+        login: async () => ({
+          ok: true,
+          user: { id: 'user-1', email: 'user@example.com', status: 'active' },
+          accessToken: 'fixture',
+          refreshToken: 'fixture',
+        }),
+        startLogin: async () => ({ ok: true, attemptId: 'attempt-1', authorizationUrl: 'https://example.com/oauth' }),
+        getLoginStatus: async () => {
+          throw createHttpError(400, 'failed')
+        },
+      }),
+      refreshTokenStore: createStore(),
+      openExternal: async () => undefined,
+    })
+
+    await service.login({ email: 'user@example.com', password: 'password' })
+    await service.startLogin()
+    await expect(service.getLoginStatus()).resolves.toMatchObject({ ok: false, status: 'failed' })
+    await expect(service.getLoginStatus()).resolves.toMatchObject({ ok: true, status: 'idle' })
+  })
+
+  it('没有活动 OAuth 尝试时不会请求服务端', async () => {
+    const getLoginStatus = vi.fn(async () => ({ ok: true, status: 'idle' }))
     const service = createAuthService({
       oauth: createOAuth({ getLoginStatus }),
+      refreshTokenStore: createStore(),
       openExternal: async () => undefined,
     })
 

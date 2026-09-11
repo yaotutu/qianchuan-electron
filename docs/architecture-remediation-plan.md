@@ -81,10 +81,16 @@ Application 只依赖业务能力，例如：
 
 ```ts
 export type OAuthCapabilities = {
-  startLogin: () => Promise<OAuthLoginStartResult>
-  getLoginStatus: (attemptId: string) => Promise<OAuthLoginStatusResult>
-  getCurrentAuthorization: (options?: { forceRefresh?: boolean }) => Promise<OAuthAuthorizationResult>
   getHealth: () => Promise<OAuthHealthResult>
+  register: (input: ProductRegisterInput) => Promise<ProductAuthResult>
+  login: (input: ProductCredentials) => Promise<ProductAuthResult>
+  refreshProductSession: (refreshToken: string) => Promise<ProductAuthResult>
+  logout: (accessToken: string) => Promise<void>
+  startLogin: (accessToken: string) => Promise<OAuthLoginStartResult>
+  getLoginStatus: (accessToken: string, attemptId: string) => Promise<OAuthLoginStatusResult>
+  listAccounts: (accessToken: string) => Promise<OAuthAccountsResult>
+  getAccountToken: (accessToken: string, authorizationId: string) => Promise<OAuthAuthorizationTokenResult>
+  deleteAccount: (accessToken: string, authorizationId: string) => Promise<void>
 }
 ```
 
@@ -306,16 +312,15 @@ capturedAt
 
 校验逻辑应当是纯判断函数，Electron 的 `event.sender` 获取和窗口注册放在边界适配器中。
 
-### 7.2 OAuth 客户端身份暂缓
+### 7.2 OAuth 用户隔离与会话边界（已落地）
 
-OAuth 服务端的用户、设备、安装实例和授权尝试隔离，需要等待配套 OAuth 服务端新契约稳定后再一起设计。
+新版服务端使用产品用户 Bearer Token 隔离授权尝试和巨量账号，不再读取全局“最近授权”。Electron 侧当前维持：
 
-Electron 侧当前只维持：
-
-- Refresh Token 由服务端保存；
-- Access Token 只在 Main 内存中；
-- 应用启动时通过 `/oauth/current` 恢复；
-- 不在 Electron 侧增加临时客户端 ID 或配对协议。
+- 产品 Access Token 和巨量 Access Token 只在 Main 内存中；
+- 产品 Refresh Token 由 Electron `safeStorage` 加密保存，巨量 Refresh Token 仍只由服务端保存；
+- 应用启动时通过 `/auth/refresh` 恢复产品会话，再读取 `/oauth/accounts`；
+- 获取巨量 Token、切换和删除授权时都显式携带 `authorizationId`；
+- 不增加额外的临时客户端 ID 或旧接口兼容层。
 
 ## 8. 错误处理目标
 
@@ -422,4 +427,4 @@ Slice 3 已开始：已完成 Query Key 的纯函数集中化、缓存隔离测�
 - 提前设计多平台统一抽象；
 - 把监控迁移到云端；
 - 根据千川网页内部接口扩展写入能力；
-- 为 OAuth 服务端尚未稳定的身份协议创建 Electron 临时兼容层。
+- 为已经删除的旧 OAuth 接口创建兼容层。

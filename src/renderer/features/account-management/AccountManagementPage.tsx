@@ -1,24 +1,29 @@
 import { Alert, Card, Descriptions, Tag } from '@arco-design/web-react'
-import type { AdvertiserAccount, AuthorizationResult } from '../../../shared/contracts'
+import type { AdvertiserAccount, AuthState } from '../../../shared/contracts'
 import { WorkspacePageHeader, SummaryCards } from '../workspace-plans/components'
 
 const formatDate = (value?: string) => (value ? new Date(value).toLocaleString('zh-CN') : '未返回')
 
 export const AccountManagementPage = ({
   accounts,
-  authorization,
+  authState,
 }: {
   accounts: AdvertiserAccount[]
-  authorization: AuthorizationResult
+  authState: AuthState
 }) => {
-  const expiresAt = authorization.token?.accessTokenExpiresAt
+  // 页面只读取脱敏后的授权摘要；平台 Access Token 始终停留在 Electron 主进程内存。
+  const selectedAuthorization =
+    authState.oauthAccounts.find((account) => account.authorizationId === authState.selectedAuthorizationId) ?? null
+  const platformUserName = selectedAuthorization?.user?.displayName || selectedAuthorization?.user?.email || '千川用户'
+
   return (
     <div className="workspace-page">
-      <WorkspacePageHeader title="账号管理" description="查看当前授权范围内的广告主与店铺信息。" />
+      <WorkspacePageHeader title="账号管理" description="查看当前产品账号、巨量授权与广告主信息。" />
       <SummaryCards
         items={[
-          { title: '授权账号', value: accounts.length, suffix: '个' },
-          { title: '当前用户', value: authorization.user?.displayName || '千川用户' },
+          { title: '巨量授权', value: authState.oauthAccounts.length, suffix: '个' },
+          { title: '当前授权', value: platformUserName },
+          { title: '广告主账号', value: accounts.length, suffix: '个' },
         ]}
       />
       <Card title="授权状态" bordered={false}>
@@ -27,8 +32,10 @@ export const AccountManagementPage = ({
           className="workspace-descriptions"
           column={1}
           data={[
-            { label: '授权用户', value: authorization.user?.email || authorization.user?.displayName || '未返回' },
-            { label: '短期授权有效期', value: formatDate(expiresAt) },
+            { label: '产品账号', value: authState.productUser?.email || '未登录' },
+            { label: '巨量授权用户', value: platformUserName },
+            { label: '授权 ID', value: authState.selectedAuthorizationId || '未选择' },
+            { label: '短期授权有效期', value: formatDate(authState.accessTokenExpiresAt) },
             { label: '安全说明', value: 'Access Token 仅保留在 Electron 主进程内存，不在页面展示。' },
           ]}
         />

@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from 'react'
-import { Avatar, Badge, Button, Card, Layout, Menu, Tag, Typography } from '@arco-design/web-react'
+import { Avatar, Badge, Button, Card, Layout, Menu, Select, Tag, Typography } from '@arco-design/web-react'
 import {
   IconApps,
   IconCaretDown,
@@ -10,7 +10,7 @@ import {
   IconUser,
 } from '@arco-design/web-react/icon'
 import { useLocation, useNavigate } from 'react-router-dom'
-import type { AuthorizationResult, AdvertiserAccount } from '../../../shared/contracts'
+import type { AdvertiserAccount, AuthState } from '../../../shared/contracts'
 import { useWorkspaceStore } from '../../app/store'
 import { WorkspaceRoutes } from '../../app/router'
 import { showInfoFeedback } from '../../shared/ui/feedback'
@@ -43,12 +43,21 @@ const multiplierNav = [
 ]
 
 type WorkspaceLayoutProps = {
-  authorization: AuthorizationResult
-  onReauthorize: () => void
+  authState: AuthState
+  busy: boolean
+  onSelectAuthorization: (authorizationId: string) => Promise<void>
+  onReauthorize: () => Promise<void>
+  onLogout: () => Promise<void>
 }
 
-/** 千川工作台骨架：只负责导航、账号选择和页面容器，不承载计划查询细节。 */
-export const WorkspaceLayout = ({ authorization, onReauthorize }: WorkspaceLayoutProps) => {
+/** 千川工作台骨架：只负责导航、授权切换、广告主选择和页面容器，不承载计划查询细节。 */
+export const WorkspaceLayout = ({
+  authState,
+  busy,
+  onSelectAuthorization,
+  onReauthorize,
+  onLogout,
+}: WorkspaceLayoutProps) => {
   const navigate = useNavigate()
   const location = useLocation()
   const currentView = location.pathname.replace(/^\//, '') || 'promotion-monitor'
@@ -64,8 +73,11 @@ export const WorkspaceLayout = ({ authorization, onReauthorize }: WorkspaceLayou
     accountSelectionInitialized,
     setAccountSelectionInitialized,
   } = useWorkspaceStore()
-  const accounts = authorization.token?.advertiserAccounts || []
-  const advertiserIds = authorization.token?.advertiserIds || accounts.map((account) => account.advertiserId)
+  const activeAuthorizations = authState.oauthAccounts.filter((account) => account.status === 'active')
+  const selectedAuthorization =
+    activeAuthorizations.find((account) => account.authorizationId === authState.selectedAuthorizationId) ?? null
+  const accounts = selectedAuthorization?.advertiserAccounts ?? []
+  const advertiserIds = selectedAuthorization?.advertiserIds ?? accounts.map((account) => account.advertiserId)
   const normalizedAccounts = useMemo(() => {
     const accountMap = new Map(accounts.map((account) => [String(account.advertiserId), account]))
     return advertiserIds.map((id) => accountMap.get(String(id)) || { advertiserId: String(id) })
@@ -147,11 +159,27 @@ export const WorkspaceLayout = ({ authorization, onReauthorize }: WorkspaceLayou
             <i /> 登录服务正常
           </span>
           <span className="top-user">
-            <Avatar size={28}>{(authorization.user?.displayName || '千').slice(0, 1)}</Avatar>
-            {authorization.user?.displayName || '千川用户'}
+            <Avatar size={28}>{(authState.productUser?.email || '电').slice(0, 1).toUpperCase()}</Avatar>
+            {authState.productUser?.email || '电小奇用户'}
           </span>
-          <Button type="outline" size="small" onClick={onReauthorize}>
-            重新授权
+          {activeAuthorizations.length > 1 && (
+            <Select
+              size="small"
+              value={authState.selectedAuthorizationId ?? undefined}
+              loading={busy}
+              onChange={(authorizationId) => void onSelectAuthorization(authorizationId)}
+              options={activeAuthorizations.map((account) => ({
+                value: account.authorizationId,
+                label: account.user?.displayName || account.user?.email || account.authorizationId,
+              }))}
+              style={{ width: 160 }}
+            />
+          )}
+          <Button type="outline" size="small" loading={busy} onClick={() => void onReauthorize()}>
+            绑定新账号
+          </Button>
+          <Button type="text" size="small" disabled={busy} onClick={() => void onLogout()}>
+            退出
           </Button>
         </div>
       </header>
@@ -208,11 +236,7 @@ export const WorkspaceLayout = ({ authorization, onReauthorize }: WorkspaceLayou
         </Sider>
 
         <Content className="workspace-content">
-          <WorkspaceRoutes
-            accounts={normalizedAccounts}
-            currentAccountId={currentAccountId}
-            authorization={authorization}
-          />
+          <WorkspaceRoutes accounts={normalizedAccounts} currentAccountId={currentAccountId} authState={authState} />
         </Content>
       </Layout>
     </Layout>

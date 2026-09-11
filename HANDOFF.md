@@ -1,8 +1,8 @@
 # qianchuan-electron Handoff 文档
 
-> 生成时间：2026-09-07  
-> 分支：`dev`  
-> 最新提交：`b4a63f2 fix: refresh qianchuan tokens without exposing secrets`  
+> 更新时间：2026-09-08
+> 分支：`dev`
+> 改造前基线提交：`b8df4cf refactor: 收敛架构边界并完善 IPC 契约`
 > 配套仓库：`/Users/yaotutu/Desktop/code/dianxiaoqi-qianchuan/qianchuan-oauth-callback`
 
 ---
@@ -45,31 +45,34 @@
 ### 3.1 授权与数据流
 
 ```text
-登录：
-Electron → /oauth/oceanengine/start → 系统浏览器授权
-→ 巨量回调 OAuth 服务 → 服务端安全保存 Token
+产品登录：
+Renderer → 最小 IPC → Electron 主进程调用 `/auth/login` 或 `/auth/register`
+→ 产品 Access Token 留在主进程内存
+→ 产品 Refresh Token 通过 Electron `safeStorage` 加密保存
+
+巨量授权：
+Electron 使用产品 Bearer Token 调用 `POST /oauth/oceanengine/start`
+→ 系统浏览器授权 → 巨量回调 OAuth 服务 → 服务端安全保存巨量 Token
+→ Electron 轮询 `/oauth/result?attempt_id=...` → 重新读取 `/oauth/accounts`
 
 日常业务：
-Electron 主进程启动或需要恢复授权时
-→ 请求 OAuth 服务端 `/oauth/current`
-→ 服务端读取加密授权，必要时用 Refresh Token 刷新
-→ 只把短期 Access Token 返回给 Electron 主进程内存
+Electron 按当前 `authorizationId` 调用 `/oauth/accounts/{authorizationId}/token`
+→ 只把短期巨量 Access Token 保存在主进程内存
 → Electron 主进程直接调用巨量 `/open_api/...`
 → 最小 IPC 返回脱敏业务数据
 
 Token 失效：
-Electron 检测到明确 Token 失效错误
-→ `/oauth/current`
-→ 服务端自动刷新并持久化轮换后的 Token
-→ Electron 用新 Token 重试一次
+产品 Access Token 失效 → `/auth/refresh` 轮换产品会话并重试一次
+巨量 Access Token 失效 → 重新获取当前 `authorizationId` 的 Token并重试一次
 ```
 
 ### 3.2 安全边界
 
-- `App Secret`、`Refresh Token`、`Cookie`、网页凭据只保存在 OAuth 服务端。
-- `Access Token` 只保存在 Electron **主进程内存**，不写入磁盘、日志、仓库，不传给 Renderer。
-- 应用退出后 Access Token 会自然丢失；下次启动自动请求 `/oauth/current` 恢复，不要求用户重复授权。
-- 只有 Refresh Token 过期、授权撤销或权限变化时，才进入重新授权流程。
+- 巨量 `App Secret`、巨量 Refresh Token、Cookie 和网页凭据只保存在 OAuth 服务端。
+- 产品 Access Token 和巨量 Access Token 只保存在 Electron **主进程内存**，不写入磁盘、日志、仓库，不传给 Renderer。
+- 产品 Refresh Token 只通过 Electron `safeStorage` 加密保存，用于应用重启后调用 `/auth/refresh`。
+- 应用恢复产品会话后重新读取该用户的巨量授权列表，并按选中的 `authorizationId` 获取短期 Token。
+- 只有产品会话或巨量授权失效时，才进入重新登录或重新绑定流程。
 - Renderer 只通过 `contextBridge` 暴露的最小 API 与主进程通信。
 - OAuth 服务端**不代理任何业务接口**，只做授权管家。
 - 不实现网页内部接口兼容层；业务请求只允许走巨量官方 `/open_api/...`。
@@ -92,13 +95,14 @@ Electron 检测到明确 Token 失效错误
 ├── src/preload.ts                    # contextBridge 安全桥
 ├── src/main/
 │   ├── application/
-│   │   ├── auth-service.ts           # 授权状态、TokenProvider、/oauth/current 调用
+│   │   ├── auth-service.ts           # 产品会话、多巨量授权状态与 TokenProvider
 │   │   ├── promotion-plan-service.ts # 计划列表、详情、监控批量读取
 │   │   └── monitor-task-service.ts   # 监控任务 CRUD、调度触发
 │   ├── infrastructure/
 │   │   ├── qianchuan-api-client.ts   # 巨量 /open_api/... HTTP 客户端
 │   │   ├── qianchuan-domain.ts       # 计划列表参数解析 + 详情白名单标准化
-│   │   ├── oauth-server-client.ts    # OAuth 服务端 HTTP 客户端
+│   │   ├── oauth-server-client.ts    # 产品会话与 OAuth 服务端 HTTP 客户端
+│   │   ├── product-refresh-token-store.ts # safeStorage 产品会话持久化
 │   │   ├── json-monitor-task-repository.ts
 │   │   └── electron-monitor-notifier.ts
 │   ├── ipc/register-ipc-handlers.ts  # 所有 IPC handler 注册
@@ -184,7 +188,7 @@ POST /open_api/v1.0/qianchuan/uni_promotion/ad/roi2_goal/update/
 
 - Renderer 只能提交草稿和 `confirmed: true`，不能指定 endpoint 或平台载荷；
 - 建议预算模式、未支持字段、超出 JavaScript 安全整数范围的 ID 均 fail-closed；
-- Token 失效只允许通过 `/oauth/current?force_refresh=true` 刷新并重试一次；
+- 产品 Token 失效只允许调用 `/auth/refresh` 一次；巨量 Token 失效只允许按当前 `authorizationId` 重新获取一次并重试；
 - 两个官方请求不是事务，部分成功会返回 `partial_updated`，并提示刷新详情核对；
 - 测试全部使用 Mock，尚未执行真实平台写请求。
 
@@ -233,7 +237,7 @@ bun run start
 默认端口 `3100`，健康检查：
 
 ```bash
-curl http://127.0.0.1:3100/health
+curl http://127.0.0.1:3100/health/ready
 ```
 
 ### 7.2 启动 Electron 开发环境
@@ -263,7 +267,7 @@ npm run build
 
 ## 8. 测试覆盖
 
-- 16 个测试文件，73 个测试用例全部通过。
+- 21 个测试文件，109 个测试用例全部通过。
 - 已通过：`npm run typecheck`、`npm test`、`npm run format:check`、`npm run build`。
 - 重点覆盖：
   - OAuth 客户端与 Token 刷新（含 Renderer 不拿到 Token）
@@ -290,7 +294,8 @@ npm run build
 
 ## 10. 最近的真实运行验证
 
-- OAuth 服务正常响应 `/health`；
+- 本地新版 OAuth 服务 `http://127.0.0.1:3100/health/ready` 返回 `200`，并确认 `configured: true`、`databaseConnected: true`；
+- Electron 默认连接本机最新版 OAuth 服务 `http://127.0.0.1:3100`；其他部署环境通过 `QIANCHUAN_OAUTH_SERVER_URL` 显式覆盖；
 - Electron 正常启动；
 - 授权成功后 Renderer 拿到的对象不包含 `accessToken` / `refreshToken`；
 - Electron 主进程直接调用 `/open_api/v1.0/qianchuan/uni_promotion/list/` 成功；

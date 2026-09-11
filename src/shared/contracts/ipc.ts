@@ -4,10 +4,16 @@
  */
 export const IPC_CHANNELS = {
   auth: {
-    startLogin: 'oauth:start-login',
-    getStatus: 'oauth:get-status',
-    getCurrent: 'oauth:get-current',
-    getHealth: 'oauth:get-health',
+    getHealth: 'auth:get-health',
+    restoreSession: 'auth:restore-session',
+    register: 'auth:register',
+    login: 'auth:login',
+    logout: 'auth:logout',
+    getState: 'auth:get-state',
+    startLogin: 'auth:start-oceanengine-login',
+    getStatus: 'auth:get-oceanengine-status',
+    selectAuthorization: 'auth:select-authorization',
+    deleteAuthorization: 'auth:delete-authorization',
   },
   promotionPlan: {
     list: 'plans:list',

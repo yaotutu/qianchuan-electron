@@ -25,6 +25,11 @@ import {
 } from '../../shared/contracts/promotion-plan'
 import { promotionPlanWriteInputSchema } from '../../shared/contracts/promotion-plan-write'
 import { resultFromUnknownError } from '../../shared/contracts/result'
+import {
+  authorizationIdSchema,
+  productCredentialsSchema,
+  productRegisterInputSchema,
+} from '../../shared/contracts/auth'
 import type { AuthService } from '../application/auth-service'
 import type { MonitorTaskService } from '../application/monitor-task-service'
 import type { PromotionPlanService } from '../application/promotion-plan-service'
@@ -70,6 +75,30 @@ export const registerIpcHandlers = ({
     }
 
   ipcMain.handle(
+    IPC_CHANNELS.auth.getHealth,
+    handle(() => authService.getHealth()),
+  )
+  ipcMain.handle(
+    IPC_CHANNELS.auth.restoreSession,
+    handle(() => authService.restoreSession()),
+  )
+  ipcMain.handle(
+    IPC_CHANNELS.auth.getState,
+    handle(async () => authService.getState()),
+  )
+  ipcMain.handle(
+    IPC_CHANNELS.auth.login,
+    handle((_event, input: unknown) => authService.login(productCredentialsSchema.parse(input))),
+  )
+  ipcMain.handle(
+    IPC_CHANNELS.auth.register,
+    handle((_event, input: unknown) => authService.register(productRegisterInputSchema.parse(input))),
+  )
+  ipcMain.handle(
+    IPC_CHANNELS.auth.logout,
+    handle(() => authService.logout()),
+  )
+  ipcMain.handle(
     IPC_CHANNELS.auth.startLogin,
     handle(() => authService.startLogin()),
   )
@@ -78,12 +107,16 @@ export const registerIpcHandlers = ({
     handle(() => authService.getLoginStatus()),
   )
   ipcMain.handle(
-    IPC_CHANNELS.auth.getCurrent,
-    handle(() => authService.getCurrentAuthorization()),
+    IPC_CHANNELS.auth.selectAuthorization,
+    handle((_event, authorizationId: unknown) =>
+      authService.selectAuthorization(authorizationIdSchema.parse(authorizationId)),
+    ),
   )
   ipcMain.handle(
-    IPC_CHANNELS.auth.getHealth,
-    handle(() => authService.getHealth()),
+    IPC_CHANNELS.auth.deleteAuthorization,
+    handle((_event, authorizationId: unknown) =>
+      authService.deleteAuthorization(authorizationIdSchema.parse(authorizationId)),
+    ),
   )
   ipcMain.handle(
     IPC_CHANNELS.promotionPlan.list,

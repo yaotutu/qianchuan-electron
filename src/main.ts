@@ -9,6 +9,7 @@ import { createQianchuanPromotionPlanAdapter } from './main/infrastructure/qianc
 import { notifyMonitorTask } from './main/infrastructure/electron-monitor-notifier'
 import { createJsonMonitorTaskPersistence } from './main/infrastructure/json-monitor-task-persistence'
 import { createOAuthServerClient } from './main/infrastructure/oauth-server-client'
+import { createProductRefreshTokenStore } from './main/infrastructure/product-refresh-token-store'
 import { registerIpcHandlers } from './main/ipc/register-ipc-handlers'
 import { createMonitorScheduler } from './main/monitor-scheduler'
 import { createMonitorTaskStore } from './main/monitor-task-store'
@@ -31,14 +32,17 @@ let monitorScheduler: ReturnType<typeof createMonitorScheduler> | null = null
 /**
  * 主进程作为组合根，只负责创建依赖和管理 Electron 生命周期。
  *
- * 注意：Access Token 不落盘。应用重启后的恢复必须先通过 OAuth 服务端的
- * /oauth/current 取得新的短期 Access Token，再启动本地监控调度，避免调度器
- * 在授权缓存尚未恢复时就发起一批必然失败的千川请求。
+ * 注意：两类 Access Token 都不落盘。应用重启后使用 safeStorage 中的产品 Refresh Token
+ * 恢复产品会话，再按选中的 authorizationId 获取巨量短期 Access Token。
  */
 app.whenReady().then(async () => {
   const oauthServerClient = createOAuthServerClient({ baseUrl: oauthServerUrl })
+  const refreshTokenStore = createProductRefreshTokenStore({
+    filePath: path.join(app.getPath('userData'), 'product-session.json'),
+  })
   const authService = createAuthService({
     oauth: oauthServerClient,
+    refreshTokenStore,
     openExternal: (url) => shell.openExternal(url),
   })
 
@@ -70,17 +74,12 @@ app.whenReady().then(async () => {
   registerIpcHandlers({ authService, promotionPlanService, monitorTaskService })
   void createMainWindow(mainWindowOptions)
 
-  // 这是非阻塞的启动恢复：窗口先打开，登录页可以立即显示；调度器则等本次
-  // 恢复请求结束后再启动。OAuth 服务暂时不可用时不阻塞应用，只记录非敏感状态。
+  // 窗口先打开，产品会话恢复在后台执行；恢复完成后再启动监控调度器。
+  // 如果服务暂时不可用，Renderer 会给出明确重试入口，不再卡在 disabled query 的 pending 状态。
   try {
-    const authorization = await authService.getCurrentAuthorization()
-    if (authorization.status === 'success') {
-      console.info('已从 OAuth 服务端恢复当前授权，监控调度器即将启动。')
-    } else if (authorization.status !== 'idle') {
-      console.warn(`启动时未恢复授权（${authorization.status ?? 'unknown'}），监控任务将在重新授权后继续工作。`)
-    }
+    await authService.restoreSession()
   } catch {
-    console.warn('启动时暂时无法连接 OAuth 服务端，应用仍会打开登录页；监控调度器将在本次恢复尝试后启动。')
+    console.warn('启动时暂时无法恢复产品会话，应用仍会显示登录页。')
   } finally {
     monitorScheduler.start()
   }

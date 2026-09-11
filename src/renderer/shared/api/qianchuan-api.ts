@@ -1,6 +1,11 @@
 import { ZodError } from 'zod'
 import {
-  authorizationSchema,
+  authActionResultSchema,
+  authorizationIdSchema,
+  authStateSchema,
+  oauthLoginStatusSchema,
+  productCredentialsSchema,
+  productRegisterInputSchema,
   healthSchema,
   promotionPlanDetailResultSchema,
   promotionPlanListResultSchema,
@@ -16,6 +21,8 @@ import {
   type MonitorTaskFilters,
   type MonitorTaskCreateInput,
   type MonitorTaskUpdateInput,
+  type ProductCredentials,
+  type ProductRegisterInput,
 } from '../../../shared/contracts'
 
 /** 获取 preload 暴露的安全桥；Renderer 永远不直接访问 Node.js 或巨量接口。 */
@@ -54,12 +61,33 @@ const runBridgeRequest = async <T>(actionName: string, request: () => Promise<T>
 export const qianchuanApi = {
   getHealth: () =>
     runBridgeRequest('读取登录服务状态', async () => healthSchema.parse(await getBridge().auth.getHealth())),
-  getCurrentAuthorization: () =>
-    runBridgeRequest('读取登录状态', async () => authorizationSchema.parse(await getBridge().auth.getCurrent())),
+  restoreSession: () =>
+    runBridgeRequest('恢复登录会话', async () => authStateSchema.parse(await getBridge().auth.restoreSession())),
+  getAuthState: () =>
+    runBridgeRequest('读取登录状态', async () => authStateSchema.parse(await getBridge().auth.getState())),
+  login: (input: ProductCredentials) =>
+    runBridgeRequest('登录', async () =>
+      authActionResultSchema.parse(await getBridge().auth.login(productCredentialsSchema.parse(input))),
+    ),
+  register: (input: ProductRegisterInput) =>
+    runBridgeRequest('注册', async () =>
+      authActionResultSchema.parse(await getBridge().auth.register(productRegisterInputSchema.parse(input))),
+    ),
+  logout: () => runBridgeRequest('退出登录', async () => authActionResultSchema.parse(await getBridge().auth.logout())),
   startLogin: () =>
-    runBridgeRequest('发起登录', async () => authorizationSchema.parse(await getBridge().auth.startLogin())),
+    runBridgeRequest('发起巨量授权', async () => authActionResultSchema.parse(await getBridge().auth.startLogin())),
   getLoginStatus: () =>
-    runBridgeRequest('读取授权结果', async () => authorizationSchema.parse(await getBridge().auth.getLoginStatus())),
+    runBridgeRequest('读取授权结果', async () => oauthLoginStatusSchema.parse(await getBridge().auth.getLoginStatus())),
+  selectAuthorization: (authorizationId: string) =>
+    runBridgeRequest('切换巨量授权', async () =>
+      authStateSchema.parse(await getBridge().auth.selectAuthorization(authorizationIdSchema.parse(authorizationId))),
+    ),
+  deleteAuthorization: (authorizationId: string) =>
+    runBridgeRequest('解绑巨量授权', async () =>
+      authActionResultSchema.parse(
+        await getBridge().auth.deleteAuthorization(authorizationIdSchema.parse(authorizationId)),
+      ),
+    ),
   listPromotionPlans: (input: PromotionPlanListInput) =>
     runBridgeRequest('读取商品投放计划', async () =>
       promotionPlanListResultSchema.parse(await getBridge().promotionMonitor.listPlans(input)),

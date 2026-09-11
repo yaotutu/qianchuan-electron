@@ -1,16 +1,43 @@
 /**
- * OAuth 能力契约。
+ * 新版 OAuth 服务能力契约。
  *
- * Application 只依赖这些稳定的业务语义，不知道 OAuth 服务端的 URL、HTTP Response、
- * 请求头或 JSON 传输细节。具体的 HTTP 客户端由组合根注入，便于测试和未来替换实现。
+ * 这里刻意只按当前服务端接口建模，不提供任何历史接口兼容入口。
+ * Access Token 只在主进程应用层和基础设施层之间流动，绝不作为 IPC 返回值的一部分。
  */
+export type ProductUser = {
+  id: string
+  email: string
+  status: 'active' | 'disabled' | string
+}
+
+export type ProductCredentials = {
+  email: string
+  password: string
+  deviceName?: string
+}
+
+export type ProductRegisterInput = ProductCredentials & {
+  verificationCode: string
+}
+
+export type ProductAuthResult = {
+  ok: boolean
+  user?: ProductUser
+  accessToken?: string
+  refreshToken?: string
+  message?: string
+  status?: string
+  retryAfterSeconds?: number
+}
 
 export type OAuthUser = {
   id?: string
   displayName?: string
   email?: string
-  appId?: string | number
+  appId?: string
+  materialAuthStatus?: string
   scopeCount?: number
+  apiCount?: number
 }
 
 export type OAuthAdvertiserAccount = {
@@ -19,55 +46,55 @@ export type OAuthAdvertiserAccount = {
   shopName?: string
 }
 
-/**
- * 这是主进程应用层真正需要的短期授权信息。OAuth 服务端的 Refresh Token 不进入该契约，
- * 从 Infrastructure 响应解析开始就被丢弃，避免凭据沿着应用层依赖链传播。
- */
-export type OAuthTokenPayload = {
-  accessToken?: string
+export type OAuthAuthorizationSummary = {
+  authorizationId: string
+  status: 'pending' | 'active' | 'reauthorization_required'
+  advertiserSyncStatus: 'pending' | 'success'
+  receivedAt?: string
+  updatedAt?: string
+  user: OAuthUser | null
+  advertiserIds: string[]
+  advertiserAccounts: OAuthAdvertiserAccount[]
+}
+
+export type OAuthAuthorizationTokenResult = OAuthAuthorizationSummary & {
+  accessToken: string
   accessTokenExpiresAt?: string
-  refreshTokenExpiresAt?: string
-  advertiserIds?: string[]
-  advertiserAccounts?: OAuthAdvertiserAccount[]
 }
 
-type OAuthResultBase = {
-  ok?: boolean
-  status?: string
-  message?: string
-  errorDescription?: string
-}
-
-export type OAuthLoginStartResult = OAuthResultBase & {
-  authorizationUrl?: string
+export type OAuthLoginStartResult = {
+  ok: boolean
   attemptId?: string
+  authorizationUrl?: string
   startedAt?: string
   expiresInSeconds?: number
+  status?: string
+  message?: string
 }
 
-export type OAuthLoginStatusResult = OAuthResultBase & {
-  user?: OAuthUser
-  token?: OAuthTokenPayload
+export type OAuthLoginStatusResult = {
+  ok: boolean
+  status?: string
+  attemptId?: string
+  message?: string
+  authorization?: OAuthAuthorizationSummary
 }
 
-export type OAuthAuthorizationResult = OAuthResultBase & {
-  user?: OAuthUser
-  token?: OAuthTokenPayload
+export type OAuthAccountsResult = {
+  ok: boolean
+  accounts: OAuthAuthorizationSummary[]
+  message?: string
 }
 
-export type OAuthHealthResult = OAuthResultBase & {
+export type OAuthHealthResult = {
+  ok: boolean
+  status?: string
+  message?: string
   version?: string
   configured?: boolean
-  capabilities?: string[]
-  missingConfig?: string[]
+  databaseConnected?: boolean
 }
 
-/**
- * OAuth 请求失败的稳定分类。
- *
- * 这里不暴露平台原始响应，也不把任意 HTTP 客户端错误对象带入 Application；
- * 应用层只需要 status 和服务端声明的业务状态来决定是否重新授权或清理缓存。
- */
 export type OAuthCapabilityErrorDetails = {
   status?: number
   payloadStatus?: string
@@ -100,16 +127,19 @@ export const getOAuthCapabilityErrorDetails = (error: unknown): OAuthCapabilityE
       message: capabilityError.message,
     }
   }
-
-  return {
-    message: error instanceof Error ? error.message : '未知错误',
-  }
+  return { message: error instanceof Error ? error.message : '未知错误' }
 }
 
-/** Application 使用的最小 OAuth 能力集合。 */
+/** Application 只依赖这些最小能力函数，不依赖 HTTP 客户端实现。 */
 export type OAuthCapabilities = {
-  startLogin: () => Promise<OAuthLoginStartResult>
-  getLoginStatus: (attemptId: string) => Promise<OAuthLoginStatusResult>
-  getCurrentAuthorization: (options?: { forceRefresh?: boolean }) => Promise<OAuthAuthorizationResult>
   getHealth: () => Promise<OAuthHealthResult>
+  register: (input: ProductRegisterInput) => Promise<ProductAuthResult>
+  login: (input: ProductCredentials) => Promise<ProductAuthResult>
+  refreshProductSession: (refreshToken: string) => Promise<ProductAuthResult>
+  logout: (accessToken: string) => Promise<void>
+  startLogin: (accessToken: string) => Promise<OAuthLoginStartResult>
+  getLoginStatus: (accessToken: string, attemptId: string) => Promise<OAuthLoginStatusResult>
+  listAccounts: (accessToken: string) => Promise<OAuthAccountsResult>
+  getAccountToken: (accessToken: string, authorizationId: string) => Promise<OAuthAuthorizationTokenResult>
+  deleteAccount: (accessToken: string, authorizationId: string) => Promise<void>
 }

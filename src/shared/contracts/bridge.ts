@@ -1,4 +1,12 @@
 import type {
+  AuthActionResult,
+  AuthState,
+  HealthResult,
+  ProductCredentials,
+  ProductRegisterInput,
+  OAuthLoginStatusResult,
+} from './auth'
+import type {
   MonitorTaskCreateInput,
   MonitorTaskFilters,
   MonitorTaskStatus,
@@ -13,13 +21,19 @@ import type {
 } from './promotion-plan'
 import type { PromotionPlanWriteInput } from './promotion-plan-write'
 
-/** Renderer 可见的全部能力清单；不暴露 ipcRenderer、shell 或任何 Node.js API。 */
+/** Renderer 只能看到脱敏后的认证状态，所有产品/巨量 Token 都留在主进程。 */
 export type QianchuanBridge = {
   auth: {
-    startLogin: () => Promise<unknown>
-    getLoginStatus: () => Promise<unknown>
-    getCurrent: () => Promise<unknown>
-    getHealth: () => Promise<unknown>
+    getHealth: () => Promise<HealthResult>
+    restoreSession: () => Promise<AuthState>
+    register: (input: ProductRegisterInput) => Promise<AuthActionResult>
+    login: (input: ProductCredentials) => Promise<AuthActionResult>
+    logout: () => Promise<AuthActionResult>
+    getState: () => Promise<AuthState>
+    startLogin: () => Promise<AuthActionResult>
+    getLoginStatus: () => Promise<OAuthLoginStatusResult>
+    selectAuthorization: (authorizationId: string) => Promise<AuthState>
+    deleteAuthorization: (authorizationId: string) => Promise<AuthActionResult>
   }
   promotionMonitor: {
     listPlans: (input: PromotionPlanListInput) => Promise<PromotionPlanListResult>

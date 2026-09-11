@@ -1,202 +1,269 @@
+import type { AuthState } from '../../shared/contracts/auth'
 import {
   getOAuthCapabilityErrorDetails,
-  type OAuthAuthorizationResult,
+  type OAuthAuthorizationSummary,
   type OAuthCapabilities,
-  type OAuthLoginStatusResult,
-  type OAuthTokenPayload,
+  type ProductCredentials,
+  type ProductRegisterInput,
+  type ProductUser,
 } from './capabilities/oauth'
+import type { ProductRefreshTokenStore } from './capabilities/product-session-store'
 
 type AuthServiceDependencies = {
   oauth: OAuthCapabilities
+  refreshTokenStore: ProductRefreshTokenStore
   openExternal: (url: string) => Promise<void>
-  now?: () => Date
 }
 
-const REQUIRED_SERVER_CAPABILITIES = ['oauth-attempt-result', 'current-authorization']
-
 /**
- * 登录尝试状态只存在于 Electron 主进程内存中。
- * 服务端负责安全保存和刷新凭据，Electron 主进程拿到 Access Token 后直接调用巨量平台 API。
- * Renderer 不接触 Access Token、Refresh Token 或 App Secret。
+ * 新版认证服务同时管理两层身份：产品用户会话和该用户绑定的巨量授权。
+ * 两类 Access Token 都只保存在主进程内存；磁盘上仅保存 safeStorage 加密后的产品 Refresh Token。
  */
-export const createAuthService = ({ oauth, openExternal, now = () => new Date() }: AuthServiceDependencies) => {
-  let activeAttemptId: string | null = null
-  let activeLoginStartedAt: string | null = null
-
-  // 主进程缓存的 Access Token 和授权广告主列表
-  // Access Token 是用户级别的短期凭证（约 1 小时过期），缓存在主进程内存中
+export const createAuthService = ({ oauth, refreshTokenStore, openExternal }: AuthServiceDependencies) => {
+  let productUser: ProductUser | null = null
+  let productAccessToken: string | null = null
+  let oauthAccounts: OAuthAuthorizationSummary[] = []
+  let selectedAuthorizationId: string | null = null
   let cachedAccessToken: string | null = null
+  let cachedAccessTokenExpiresAt: string | undefined
   let cachedAdvertiserIds: string[] = []
-  /**
-   * 启动恢复、Renderer 首次查询和 Token 失效重试可能同时触发 /oauth/current。
-   * 合并并发请求可以避免同一时刻重复刷新服务端 Refresh Token，也避免缓存被较旧响应覆盖。
-   */
-  let authorizationRestoreInFlight: Promise<OAuthAuthorizationResult> | null = null
+  let activeAttemptId: string | null = null
+  let restoreInFlight: Promise<AuthState> | null = null
+  let refreshInFlight: Promise<boolean> | null = null
 
-  const clearActiveAttempt = () => {
-    activeAttemptId = null
-    activeLoginStartedAt = null
-  }
-
-  const clearAuthorizationCache = () => {
-    // 授权被撤销或刷新失败时必须清空旧缓存，避免继续使用已作废的本地凭证。
+  const clearPlatformSelection = () => {
+    selectedAuthorizationId = null
     cachedAccessToken = null
+    cachedAccessTokenExpiresAt = undefined
     cachedAdvertiserIds = []
   }
 
-  const startLogin = async () => {
-    const result = await oauth.startLogin()
-    if (result.ok !== true || typeof result.authorizationUrl !== 'string' || typeof result.attemptId !== 'string') {
-      return { ok: false, status: 'server_unavailable', message: '登录服务暂未准备好，请稍后重试。' }
+  const clearSession = () => {
+    productUser = null
+    productAccessToken = null
+    oauthAccounts = []
+    activeAttemptId = null
+    clearPlatformSelection()
+    refreshTokenStore.clear()
+  }
+
+  /** IPC 状态由白名单字段重新组装，任何 Token 都不会进入 Renderer。 */
+  const getState = (): AuthState => ({
+    productUser,
+    oauthAccounts: oauthAccounts.map((account) => ({
+      ...account,
+      advertiserIds: [...account.advertiserIds],
+      advertiserAccounts: account.advertiserAccounts.map((advertiser) => ({ ...advertiser })),
+    })),
+    selectedAuthorizationId,
+    selectedAdvertiserIds: [...cachedAdvertiserIds],
+    accessTokenExpiresAt: cachedAccessTokenExpiresAt,
+  })
+
+  const applyProductSession = (result: Awaited<ReturnType<OAuthCapabilities['login']>>) => {
+    if (!result.user || !result.accessToken || !result.refreshToken) {
+      throw new Error('登录服务返回的会话信息不完整。')
     }
 
+    // 先完成加密落盘，再更新内存会话，避免安全存储失败时留下“看似已登录”的半状态。
+    refreshTokenStore.write(result.refreshToken)
+    productUser = result.user
+    productAccessToken = result.accessToken
+  }
+
+  const refreshProductSession = async () => {
+    if (refreshInFlight) return refreshInFlight
+    refreshInFlight = (async () => {
+      const refreshToken = refreshTokenStore.read()
+      if (!refreshToken) return false
+      try {
+        applyProductSession(await oauth.refreshProductSession(refreshToken))
+        return true
+      } catch (error) {
+        if ([400, 401, 403].includes(getOAuthCapabilityErrorDetails(error).status ?? 0)) {
+          clearSession()
+          return false
+        }
+        throw error
+      }
+    })().finally(() => {
+      refreshInFlight = null
+    })
+    return refreshInFlight
+  }
+
+  const requireProductAccessToken = async () => {
+    if (productAccessToken) return productAccessToken
+    if (await refreshProductSession()) return productAccessToken as string
+    throw new Error('请先登录电小奇账号。')
+  }
+
+  /** 产品 Access Token 失效时只刷新并重放一次，避免无边界重试。 */
+  const withProductSession = async <T>(request: (accessToken: string) => Promise<T>): Promise<T> => {
+    const accessToken = await requireProductAccessToken()
+    try {
+      return await request(accessToken)
+    } catch (error) {
+      if (getOAuthCapabilityErrorDetails(error).status !== 401) throw error
+      productAccessToken = null
+      if (!(await refreshProductSession()) || !productAccessToken) throw error
+      return request(productAccessToken)
+    }
+  }
+
+  const selectAuthorization = async (authorizationId: string) => {
+    const account = oauthAccounts.find((item) => item.authorizationId === authorizationId)
+    if (!account) throw new Error('选择的巨量授权账号不存在。')
+    if (account.status !== 'active') throw new Error('该巨量授权仍在补全中，请稍后重试。')
+
+    const result = await withProductSession((accessToken) => oauth.getAccountToken(accessToken, authorizationId))
+    if (!result.accessToken) throw new Error('登录服务没有返回可用的巨量 Access Token。')
+    selectedAuthorizationId = result.authorizationId
+    cachedAccessToken = result.accessToken
+    cachedAccessTokenExpiresAt = result.accessTokenExpiresAt
+    cachedAdvertiserIds = [...result.advertiserIds]
+    return getState()
+  }
+
+  const loadAccounts = async () => {
+    const result = await withProductSession((accessToken) => oauth.listAccounts(accessToken))
+    oauthAccounts = result.accounts
+
+    const selectedStillExists = oauthAccounts.some(
+      (account) => account.authorizationId === selectedAuthorizationId && account.status === 'active',
+    )
+    if (selectedStillExists && selectedAuthorizationId) {
+      await selectAuthorization(selectedAuthorizationId)
+    } else {
+      clearPlatformSelection()
+      const firstActive = oauthAccounts.find((account) => account.status === 'active')
+      if (firstActive) await selectAuthorization(firstActive.authorizationId)
+    }
+    return getState()
+  }
+
+  const restoreSession = async () => {
+    if (restoreInFlight) return restoreInFlight
+    restoreInFlight = (async () => {
+      if (!(await refreshProductSession())) return getState()
+      return loadAccounts()
+    })().finally(() => {
+      restoreInFlight = null
+    })
+    return restoreInFlight
+  }
+
+  const login = async (input: ProductCredentials) => {
+    applyProductSession(await oauth.login(input))
+    await loadAccounts()
+    return { ok: true, status: 'authenticated', message: '登录成功。' }
+  }
+
+  const register = async (input: ProductRegisterInput) => {
+    applyProductSession(await oauth.register(input))
+    await loadAccounts()
+    return { ok: true, status: 'authenticated', message: '注册并登录成功。' }
+  }
+
+  const logout = async () => {
+    const accessToken = productAccessToken
+    try {
+      if (accessToken) await oauth.logout(accessToken)
+    } finally {
+      clearSession()
+    }
+    return { ok: true, status: 'logged_out', message: '已退出登录。' }
+  }
+
+  const startLogin = async () => {
+    const result = await withProductSession((accessToken) => oauth.startLogin(accessToken))
+    if (!result.authorizationUrl || !result.attemptId) throw new Error('登录服务没有返回完整的授权地址。')
     activeAttemptId = result.attemptId
-    activeLoginStartedAt = result.startedAt ?? now().toISOString()
     await openExternal(result.authorizationUrl)
     return {
       ok: true,
       status: 'waiting',
-      startedAt: activeLoginStartedAt,
-      expiresInSeconds: result.expiresInSeconds,
       message: '已打开巨量授权页面，请在浏览器中完成授权。',
     }
   }
 
-  /** 授权结果里的 Token 形状；仅主进程内部读取，不作为公开类型导出。 */
-  type AuthorizationToken = OAuthTokenPayload
-
-  /**
-   * 裁剪任意授权结果中的 Token 原文；OAuth 轮询和当前授权都必须经过这里。
-   * 这里显式重建 token 对象，而不是简单透传服务端结果，避免未来服务端增加字段时意外泄露密钥。
-   */
-  const stripTokenSecrets = <T extends OAuthLoginStatusResult | OAuthAuthorizationResult>(result: T) => {
-    const token = result.token as AuthorizationToken | undefined
-    if (!token) return result
-
-    return {
-      ...result,
-      token: {
-        accessTokenExpiresAt: token.accessTokenExpiresAt,
-        advertiserIds: token.advertiserIds ?? [],
-        advertiserAccounts: token.advertiserAccounts ?? [],
-      },
-    }
-  }
-
   const getLoginStatus = async () => {
-    if (!activeAttemptId) return { ok: true, status: 'idle', message: '还没有发起本次授权。' }
+    if (!activeAttemptId) return { ok: true, status: 'idle', message: '当前没有进行中的巨量授权。' }
     try {
-      const result = await oauth.getLoginStatus(activeAttemptId)
-      if (result.status !== 'waiting') clearActiveAttempt()
-      return stripTokenSecrets(result)
-    } catch (error) {
-      if (getOAuthCapabilityErrorDetails(error).status === 404) {
-        clearActiveAttempt()
-        return { ok: false, status: 'expired', message: '本次登录请求已经失效，请重新登录。' }
+      const result = await withProductSession((accessToken) =>
+        oauth.getLoginStatus(accessToken, activeAttemptId as string),
+      )
+      if (result.status === 'success') {
+        activeAttemptId = null
+        await loadAccounts()
+      } else if (result.status === 'failed') {
+        activeAttemptId = null
       }
-      throw error
-    }
-  }
-
-  /**
-   * 主进程内部使用的授权载荷。
-   * Access Token 只停留在主进程内存中；Refresh Token 永远只由 OAuth 服务端持久化和使用。
-   * 返回 Renderer 前会被裁剪为非敏感字段。
-   */
-  const readAuthorization = async (forceRefresh = false) => {
-    if (authorizationRestoreInFlight) return authorizationRestoreInFlight
-
-    authorizationRestoreInFlight = (async () => {
-      const result = await oauth.getCurrentAuthorization({ forceRefresh })
-      const token = result.token
-
-      if (token?.accessToken) {
-        cachedAccessToken = token.accessToken
-        cachedAdvertiserIds = [...(token.advertiserIds ?? [])]
-      } else {
-        clearAuthorizationCache()
-      }
-
-      // 无论服务端是否有有效 Access Token，都不能把 Token 原文传给 Renderer。
-      return stripTokenSecrets(result)
-    })().finally(() => {
-      authorizationRestoreInFlight = null
-    })
-
-    return authorizationRestoreInFlight
-  }
-
-  /** Renderer 使用的当前授权状态；这里保证不会返回 Token 原文。 */
-  const getCurrentAuthorization = async () => {
-    try {
-      return await readAuthorization()
+      return result
     } catch (error) {
       const details = getOAuthCapabilityErrorDetails(error)
-      if (details.status === 404) {
-        clearAuthorizationCache()
-        return { ok: true, status: 'idle', message: '当前还没有完成授权。' }
+      if (details.status === 404 || details.payloadStatus === 'not_found') {
+        activeAttemptId = null
+        return { ok: false, status: 'expired', message: '本次授权请求已失效，请重新发起。' }
       }
-      if (details.status === 401) {
-        // 401 表示 Refresh Token 不可恢复，需要清理主进程缓存并引导用户重新授权。
-        clearAuthorizationCache()
-        const requiresLogin = details.payloadStatus === 'reauthorization_required'
-        return {
-          ok: false,
-          status: requiresLogin ? 'reauthorization_required' : 'token_refresh_failed',
-          message: requiresLogin ? '授权已失效，请重新登录。' : '登录服务暂时无法续期授权，请稍后重新检测。',
-        }
+      if (details.payloadStatus === 'failed' || details.payloadStatus === 'reauthorization_required') {
+        activeAttemptId = null
+        if (details.payloadStatus === 'reauthorization_required') clearPlatformSelection()
+        return { ok: false, status: 'failed', message: details.message }
       }
       throw error
     }
   }
 
-  /**
-   * 供业务 API 客户端触发安全刷新。
-   * 每次 OpenAPI 请求返回 Token 失效错误时最多调用一次，避免无限重试。
-   */
+  const deleteAuthorization = async (authorizationId: string) => {
+    await withProductSession((accessToken) => oauth.deleteAccount(accessToken, authorizationId))
+    if (selectedAuthorizationId === authorizationId) clearPlatformSelection()
+    await loadAccounts()
+    return { ok: true, status: 'deleted', message: '巨量授权已解绑。' }
+  }
+
+  const getHealth = async () => {
+    const health = await oauth.getHealth()
+    if (
+      health.ok !== true ||
+      health.status !== 'ready' ||
+      health.configured !== true ||
+      health.databaseConnected !== true
+    ) {
+      return { ...health, ok: false, message: health.message ?? '登录服务暂未准备好，请稍后重试。' }
+    }
+    return health
+  }
+
+  /** 巨量 Token 失效时，按当前 authorizationId 重新向服务端获取一次。 */
   const refreshAccessToken = async () => {
+    if (!selectedAuthorizationId) return null
     try {
-      await readAuthorization(true)
+      await selectAuthorization(selectedAuthorizationId)
       return cachedAccessToken
     } catch (error) {
-      const status = getOAuthCapabilityErrorDetails(error).status
-      if (status === 404 || status === 401) {
-        clearAuthorizationCache()
+      if ([401, 404, 409].includes(getOAuthCapabilityErrorDetails(error).status ?? 0)) {
+        clearPlatformSelection()
         return null
       }
       throw error
     }
   }
 
-  const getHealth = async () => {
-    const health = await oauth.getHealth()
-    const capabilities = health.capabilities ?? []
-    if (
-      typeof health.version !== 'string' ||
-      REQUIRED_SERVER_CAPABILITIES.some((capability) => !capabilities.includes(capability))
-    ) {
-      return { ok: false, status: 'server_outdated', message: '登录服务仍在运行旧版本，请重启登录服务后再试。' }
-    }
-    if (health.configured !== true) {
-      console.error('OAuth 服务端配置未完成：', health.missingConfig ?? [])
-      return { ok: false, status: 'server_unavailable', message: '登录服务暂未准备好，请稍后重试。' }
-    }
-    return { ok: true, status: 'ready', version: health.version }
-  }
-
   return {
+    getHealth,
+    getState,
+    restoreSession,
+    register,
+    login,
+    logout,
+    listAccounts: loadAccounts,
     startLogin,
     getLoginStatus,
-    getCurrentAuthorization,
-    getHealth,
-    /**
-     * 返回主进程缓存的 Access Token，供千川 API 客户端直接使用。
-     * 应用退出后该值自然丢失，下次启动由 /oauth/current 自动恢复，不能从磁盘读取。
-     */
+    selectAuthorization,
+    deleteAuthorization,
     getAccessToken: () => cachedAccessToken,
-    /** 返回当前授权的广告主 ID 列表，用于越权检查。 */
     getAdvertiserIds: () => [...cachedAdvertiserIds],
-    /** 触发服务端自动刷新，并返回新的短期 Access Token。 */
     refreshAccessToken,
   }
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  authorizationSchema,
+  authStateSchema,
   monitorTaskListResultSchema,
   promotionPlanListInputSchema,
   promotionPlanMonitorSelectionInputSchema,
@@ -9,13 +9,15 @@ import {
 } from '../index'
 
 describe('Electron 共享契约', () => {
-  it('把数字广告主 ID 统一转成字符串', () => {
-    const result = authorizationSchema.parse({
-      ok: true,
-      status: 'success',
-      token: { advertiserIds: [1842135619673292] },
-    })
-    expect(result.token?.advertiserIds).toEqual(['1842135619673292'])
+  it('新版授权契约不再兼容数字广告主 ID', () => {
+    expect(() =>
+      authStateSchema.parse({
+        productUser: null,
+        oauthAccounts: [],
+        selectedAuthorizationId: null,
+        selectedAdvertiserIds: [1842135619673292],
+      }),
+    ).toThrow()
   })
 
   it('保留计划业务字段并提供空列表默认值', () => {
@@ -116,22 +118,52 @@ it('修改草稿只保留声明字段，并校验快照内容摘要', async () =
 })
 
 describe('授权契约', () => {
-  it('Renderer 契约会剥离 Token 原文，只保留可展示字段', () => {
-    const result = authorizationSchema.parse({
-      ok: true,
-      status: 'success',
-      token: {
-        accessToken: 'access-token',
-        refreshToken: 'refresh-token',
-        accessTokenExpiresAt: '2026-09-07T01:46:07.678Z',
-        advertiserIds: ['186001'],
-      },
+  it('接受实时 OpenAPI 定义的重新授权状态', () => {
+    const result = authStateSchema.parse({
+      productUser: { id: 'user-1', email: 'user@example.com', status: 'active' },
+      oauthAccounts: [
+        {
+          authorizationId: 'authorization-expired',
+          status: 'reauthorization_required',
+          advertiserSyncStatus: 'success',
+          user: null,
+          advertiserIds: [],
+          advertiserAccounts: [],
+        },
+      ],
+      selectedAuthorizationId: null,
+      selectedAdvertiserIds: [],
     })
 
-    expect(result.token).not.toHaveProperty('accessToken')
-    expect(result.token).not.toHaveProperty('refreshToken')
-    expect(result.token?.accessTokenExpiresAt).toBe('2026-09-07T01:46:07.678Z')
-    expect(result.token?.advertiserIds).toEqual(['186001'])
+    expect(result.oauthAccounts[0]?.status).toBe('reauthorization_required')
+  })
+
+  it('Renderer 契约会剥离产品和巨量 Token，只保留脱敏状态', () => {
+    const result = authStateSchema.parse({
+      productUser: { id: 'user-1', email: 'user@example.com', status: 'active', accessToken: 'fixture' },
+      oauthAccounts: [
+        {
+          authorizationId: 'authorization-1',
+          status: 'active',
+          advertiserSyncStatus: 'success',
+          user: null,
+          advertiserIds: ['186001'],
+          advertiserAccounts: [],
+          accessToken: 'fixture',
+          refreshToken: 'fixture',
+        },
+      ],
+      selectedAuthorizationId: 'authorization-1',
+      selectedAdvertiserIds: ['186001'],
+      accessTokenExpiresAt: '2026-09-08T12:00:00.000Z',
+      productRefreshToken: 'fixture',
+    })
+
+    expect(result.productUser).not.toHaveProperty('accessToken')
+    expect(result.oauthAccounts[0]).not.toHaveProperty('accessToken')
+    expect(result.oauthAccounts[0]).not.toHaveProperty('refreshToken')
+    expect(result).not.toHaveProperty('productRefreshToken')
+    expect(result.selectedAdvertiserIds).toEqual(['186001'])
   })
 })
 
