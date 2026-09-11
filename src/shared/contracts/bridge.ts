@@ -20,6 +20,7 @@ import type {
   PromotionPlanListResult,
 } from './promotion-plan'
 import type { PromotionPlanWriteInput } from './promotion-plan-write'
+import type { AppUpdateState } from './app-update'
 
 /** Renderer 只能看到脱敏后的认证状态，所有产品/巨量 Token 都留在主进程。 */
 export type QianchuanBridge = {
@@ -34,6 +35,12 @@ export type QianchuanBridge = {
     getLoginStatus: () => Promise<OAuthLoginStatusResult>
     selectAuthorization: (authorizationId: string) => Promise<AuthState>
     deleteAuthorization: (authorizationId: string) => Promise<AuthActionResult>
+  }
+  appUpdate: {
+    getState: () => Promise<AppUpdateState>
+    check: () => Promise<AppUpdateState>
+    install: () => Promise<AppUpdateState>
+    onChanged: (listener: (state: AppUpdateState) => void) => () => void
   }
   promotionMonitor: {
     listPlans: (input: PromotionPlanListInput) => Promise<PromotionPlanListResult>

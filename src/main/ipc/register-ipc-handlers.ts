@@ -33,12 +33,14 @@ import {
 import type { AuthService } from '../application/auth-service'
 import type { MonitorTaskService } from '../application/monitor-task-service'
 import type { PromotionPlanService } from '../application/promotion-plan-service'
+import type { UpdateService } from '../application/update-service'
 import { toSafeError } from './safe-ipc-error'
 
 type RegisterIpcHandlersDependencies = {
   authService: AuthService
   promotionPlanService: PromotionPlanService
   monitorTaskService: MonitorTaskService
+  updateService: UpdateService
 }
 
 /**
@@ -52,6 +54,7 @@ export const registerIpcHandlers = ({
   authService,
   promotionPlanService,
   monitorTaskService,
+  updateService,
 }: RegisterIpcHandlersDependencies) => {
   const handle =
     <T>(callback: (...args: unknown[]) => Promise<T>) =>
@@ -78,6 +81,12 @@ export const registerIpcHandlers = ({
     IPC_CHANNELS.auth.getHealth,
     handle(() => authService.getHealth()),
   )
+  ipcMain.handle(IPC_CHANNELS.appUpdate.getState, async () => updateService.getState())
+  ipcMain.handle(
+    IPC_CHANNELS.appUpdate.check,
+    handle(() => updateService.checkForUpdates()),
+  )
+  ipcMain.handle(IPC_CHANNELS.appUpdate.install, async () => updateService.install())
   ipcMain.handle(
     IPC_CHANNELS.auth.restoreSession,
     handle(() => authService.restoreSession()),

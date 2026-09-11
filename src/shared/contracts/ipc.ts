@@ -21,6 +21,12 @@ export const IPC_CHANNELS = {
     detail: 'plans:detail',
     update: 'plans:update',
   },
+  appUpdate: {
+    getState: 'app-update:get-state',
+    check: 'app-update:check',
+    install: 'app-update:install',
+    changed: 'app-update:changed',
+  },
   monitorTask: {
     list: 'monitor-tasks:list',
     create: 'monitor-tasks:create',

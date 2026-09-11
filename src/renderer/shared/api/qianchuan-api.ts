@@ -23,11 +23,13 @@ import {
   type MonitorTaskUpdateInput,
   type ProductCredentials,
   type ProductRegisterInput,
+  appUpdateStateSchema,
+  type AppUpdateState,
 } from '../../../shared/contracts'
 
 /** 获取 preload 暴露的安全桥；Renderer 永远不直接访问 Node.js 或巨量接口。 */
 const getBridge = () => {
-  if (!window.qianchuan?.auth || !window.qianchuan?.promotionMonitor) {
+  if (!window.qianchuan?.auth || !window.qianchuan?.appUpdate || !window.qianchuan?.promotionMonitor) {
     throw new Error('客户端安全接口初始化失败，请重启应用。')
   }
   return window.qianchuan
@@ -59,6 +61,14 @@ const runBridgeRequest = async <T>(actionName: string, request: () => Promise<T>
 }
 
 export const qianchuanApi = {
+  getAppUpdateState: () =>
+    runBridgeRequest('读取更新状态', async () => appUpdateStateSchema.parse(await getBridge().appUpdate.getState())),
+  checkForAppUpdate: () =>
+    runBridgeRequest('检查更新', async () => appUpdateStateSchema.parse(await getBridge().appUpdate.check())),
+  installAppUpdate: () =>
+    runBridgeRequest('安装更新', async () => appUpdateStateSchema.parse(await getBridge().appUpdate.install())),
+  onAppUpdateChanged: (listener: (state: AppUpdateState) => void) =>
+    getBridge().appUpdate.onChanged((state) => listener(appUpdateStateSchema.parse(state))),
   getHealth: () =>
     runBridgeRequest('读取登录服务状态', async () => healthSchema.parse(await getBridge().auth.getHealth())),
   restoreSession: () =>

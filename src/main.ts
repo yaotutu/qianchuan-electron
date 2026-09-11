@@ -4,8 +4,10 @@ import path from 'node:path'
 import { createAuthService } from './main/application/auth-service'
 import { createMonitorTaskService } from './main/application/monitor-task-service'
 import { createPromotionPlanService } from './main/application/promotion-plan-service'
+import { createUpdateService } from './main/application/update-service'
 import { createQianchuanApiClient } from './main/infrastructure/qianchuan-api-client'
 import { createQianchuanPromotionPlanAdapter } from './main/infrastructure/qianchuan-promotion-plan-adapter'
+import { createElectronUpdater } from './main/infrastructure/electron-updater'
 import { notifyMonitorTask } from './main/infrastructure/electron-monitor-notifier'
 import { createJsonMonitorTaskPersistence } from './main/infrastructure/json-monitor-task-persistence'
 import { createOAuthServerClient } from './main/infrastructure/oauth-server-client'
@@ -70,9 +72,22 @@ app.whenReady().then(async () => {
     },
   })
   const monitorTaskService = createMonitorTaskService({ store: monitorTaskStore, scheduler: monitorScheduler })
+  const updateService = createUpdateService({
+    adapter: createElectronUpdater(),
+    currentVersion: app.getVersion(),
+    isPackaged: app.isPackaged,
+  })
+  updateService.onStateChange((state) => {
+    // 更新状态只通过稳定 IPC 推送给 Renderer；下载路径、请求头和 updater 实例不离开主进程。
+    BrowserWindow.getAllWindows().forEach((window) => {
+      window.webContents.send(IPC_CHANNELS.appUpdate.changed, state)
+    })
+  })
 
-  registerIpcHandlers({ authService, promotionPlanService, monitorTaskService })
+  registerIpcHandlers({ authService, promotionPlanService, monitorTaskService, updateService })
   void createMainWindow(mainWindowOptions)
+  // 更新检查与登录恢复并行，任何网络异常都由更新用例内部收敛，不阻塞应用启动。
+  void updateService.checkForUpdates()
 
   // 窗口先打开，产品会话恢复在后台执行；恢复完成后再启动监控调度器。
   // 如果服务暂时不可用，Renderer 会给出明确重试入口，不再卡在 disabled query 的 pending 状态。
@@ -89,7 +104,9 @@ app.whenReady().then(async () => {
   })
 })
 
-app.on('before-quit', () => monitorScheduler?.stop())
+app.on('before-quit', () => {
+  monitorScheduler?.stop()
+})
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
 })

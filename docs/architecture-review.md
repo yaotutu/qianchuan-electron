@@ -86,6 +86,19 @@ HTTP Routes
 
 监控任务仓库已经通过函数记录抽象，JSON 写入采用临时文件 + `rename`，并在 Store 中串行化读改写。对于当前“单机、单进程、本地监控任务”的范围，暂时不需要为了架构洁癖立即引入数据库。
 
+
+### 3.5 自动更新边界
+
+当前自动更新采用 `electron-updater`，但仍保持函数式应用边界：
+
+- `src/main/application/update-service.ts` 只负责更新状态转换、自动下载和安装前置判断；
+- `src/main/infrastructure/electron-updater.ts` 封装 Electron updater 事件和 GitHub 实现；
+- `src/shared/contracts/app-update.ts` 只暴露稳定的状态枚举和进度字段；
+- DEV 分支发布为普通 GitHub Release，版本号按工作流编号递增，并上传 `latest*.yml` 与 blockmap 元数据；
+- Renderer 不接触 GitHub API、更新实例、下载路径或任何凭据，更新故障只显示为可重试状态。
+
+当前 CI 未配置 macOS/Windows 代码签名，因此 macOS 安装包的自动安装仍受签名配置限制；这不改变更新协议本身，后续配置签名密钥时无需调整 Renderer/IPC 边界。
+
 ## 4. P0：现在不修，后续一定会返工
 
 ### P0-1（已解决）OAuth 服务端产品用户身份边界

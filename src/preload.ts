@@ -16,6 +16,7 @@ import type {
 } from './shared/contracts/promotion-plan'
 import type { PromotionPlanWriteInput } from './shared/contracts/promotion-plan-write'
 import type { ProductCredentials, ProductRegisterInput } from './shared/contracts/auth'
+import type { AppUpdateState } from './shared/contracts/app-update'
 
 /**
  * preload 是 Renderer 和主进程之间唯一的安全边界。
@@ -34,6 +35,17 @@ const authBridge = {
     ipcRenderer.invoke(IPC_CHANNELS.auth.selectAuthorization, authorizationId),
   deleteAuthorization: (authorizationId: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.auth.deleteAuthorization, authorizationId),
+}
+
+const appUpdateBridge = {
+  getState: (): Promise<AppUpdateState> => ipcRenderer.invoke(IPC_CHANNELS.appUpdate.getState),
+  check: (): Promise<AppUpdateState> => ipcRenderer.invoke(IPC_CHANNELS.appUpdate.check),
+  install: (): Promise<AppUpdateState> => ipcRenderer.invoke(IPC_CHANNELS.appUpdate.install),
+  onChanged: (listener: (state: AppUpdateState) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, state: AppUpdateState) => listener(state)
+    ipcRenderer.on(IPC_CHANNELS.appUpdate.changed, handler)
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.appUpdate.changed, handler)
+  },
 }
 
 const promotionMonitorBridge = {
@@ -62,5 +74,6 @@ const promotionMonitorBridge = {
 
 contextBridge.exposeInMainWorld('qianchuan', {
   auth: authBridge,
+  appUpdate: appUpdateBridge,
   promotionMonitor: promotionMonitorBridge,
 })

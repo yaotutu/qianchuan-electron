@@ -1,5 +1,5 @@
-import { useEffect, useMemo } from 'react'
-import { Avatar, Badge, Button, Card, Layout, Menu, Select, Tag, Typography } from '@arco-design/web-react'
+import { useEffect, useMemo, useState } from 'react'
+import { Avatar, Badge, Button, Layout, Menu, Select, Tag, Typography } from '@arco-design/web-react'
 import {
   IconApps,
   IconCaretDown,
@@ -10,10 +10,11 @@ import {
   IconUser,
 } from '@arco-design/web-react/icon'
 import { useLocation, useNavigate } from 'react-router-dom'
-import type { AdvertiserAccount, AuthState } from '../../../shared/contracts'
+import type { AdvertiserAccount, AppUpdateState, AuthState } from '../../../shared/contracts'
 import { useWorkspaceStore } from '../../app/store'
 import { WorkspaceRoutes } from '../../app/router'
-import { showInfoFeedback } from '../../shared/ui/feedback'
+import { qianchuanApi } from '../../shared/api/qianchuan-api'
+import { showErrorFeedback, showInfoFeedback } from '../../shared/ui/feedback'
 import { AccountSelector } from './components/AccountSelector'
 
 const { Sider, Content } = Layout
@@ -61,6 +62,67 @@ export const WorkspaceLayout = ({
   const navigate = useNavigate()
   const location = useLocation()
   const currentView = location.pathname.replace(/^\//, '') || 'promotion-monitor'
+  const [updateState, setUpdateState] = useState<AppUpdateState | null>(null)
+
+  // 更新检查在主进程启动时自动执行，工作台只订阅脱敏状态并提供人工重试/安装入口。
+  useEffect(() => {
+    let active = true
+    const unsubscribe = qianchuanApi.onAppUpdateChanged((nextState) => {
+      if (active) setUpdateState(nextState)
+    })
+    void qianchuanApi
+      .getAppUpdateState()
+      .then((nextState) => {
+        if (active) setUpdateState(nextState)
+      })
+      .catch(() => {
+        // 更新状态读取失败不影响工作台正常使用，主进程会继续保持后台检查。
+      })
+    return () => {
+      active = false
+      unsubscribe()
+    }
+  }, [])
+
+  const checkForUpdate = async () => {
+    try {
+      setUpdateState(await qianchuanApi.checkForAppUpdate())
+    } catch (error) {
+      showErrorFeedback(error instanceof Error ? error.message : '检查更新失败，请稍后重试。')
+    }
+  }
+
+  const installUpdate = async () => {
+    try {
+      await qianchuanApi.installAppUpdate()
+    } catch (error) {
+      showErrorFeedback(error instanceof Error ? error.message : '安装更新失败，请稍后重试。')
+    }
+  }
+
+  const updateButton =
+    updateState?.status === 'downloaded' ? (
+      <Button type="outline" size="small" status="success" onClick={() => void installUpdate()}>
+        重启更新
+      </Button>
+    ) : updateState?.status === 'checking' || updateState?.status === 'downloading' ? (
+      <Tag color="arcoblue">
+        {updateState.status === 'downloading'
+          ? `下载更新 ${Math.round(updateState.downloadPercent ?? 0)}%`
+          : '检查更新中'}
+      </Tag>
+    ) : updateState?.status === 'available' ? (
+      <Tag color="arcoblue">发现 {updateState.availableVersion}</Tag>
+    ) : updateState?.status === 'error' ? (
+      <Button type="text" size="small" icon={<IconRefresh />} onClick={() => void checkForUpdate()}>
+        重试更新
+      </Button>
+    ) : (
+      <Button type="text" size="small" icon={<IconRefresh />} onClick={() => void checkForUpdate()}>
+        检查更新
+      </Button>
+    )
+
   const {
     currentAdvertiserId,
     selectedAdvertiserIds,
@@ -138,7 +200,7 @@ export const WorkspaceLayout = ({
         <div className="topbar-brand">
           <span className="brand-mark">奇</span>
           <strong>电小奇客户端</strong>
-          <Text type="secondary">V0.2.0</Text>
+          <Text type="secondary">V{updateState?.currentVersion || '…'}</Text>
         </div>
         <span className="topbar-divider" />
         <Button className="product-switcher" type="text" icon={<span className="product-switcher-icon">川</span>}>
@@ -158,6 +220,7 @@ export const WorkspaceLayout = ({
           <span className="service-status">
             <i /> 登录服务正常
           </span>
+          {updateButton}
           <span className="top-user">
             <Avatar size={28}>{(authState.productUser?.email || '电').slice(0, 1).toUpperCase()}</Avatar>
             {authState.productUser?.email || '电小奇用户'}

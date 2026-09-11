@@ -3,8 +3,13 @@ appId: com.dianxiaoqi.qianchuan
 productName: 电小奇·千川超级商品卡
 asar: true
 
-# 发布由 GitHub Actions 的 gh CLI 统一创建 Release，electron-builder 只负责生成安装包。
-publish: null
+# DEV 分支就是正式更新渠道。electron-builder 会据此生成 app-update.yml 和 latest*.yml，
+# GitHub Actions 再把安装包与更新元数据上传到同一个普通 GitHub Release。
+publish:
+  provider: github
+  owner: yaotutu
+  repo: qianchuan-electron
+  releaseType: release
 
 directories:
   output: release

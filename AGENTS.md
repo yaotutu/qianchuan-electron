@@ -74,6 +74,7 @@ Renderer → Preload / IPC Contract → Application Use Cases → Capability Fun
 - 产品 Refresh Token 只允许由主进程通过 Electron `safeStorage` 加密保存，用于应用重启后的产品会话恢复；不得传递给 Renderer 或以明文形式落盘。
 - 巨量平台明确返回 Token 失效时，主进程只能使用当前产品会话调用 `/oauth/accounts/{authorizationId}/token` 重新获取指定授权的短期 Access Token，并对原业务请求做一次有边界重试，禁止无限重试。
 - 应用关闭后不保证监控继续运行。只有用户明确要求云端运行、多人共享或 24 小时运行时，才重新评估服务端调度方案。
+- 自动更新只在打包应用中由主进程通过 electron-updater 检查 GitHub 的 DEV 正式 Release；更新状态通过最小 IPC 脱敏传给 Renderer，下载完成后由用户重启安装。更新失败不得阻塞启动。
 
 ### 3.2 Preload 与 IPC
 
@@ -115,9 +116,9 @@ src/main.ts                                      Electron 组合根、启动配�
 src/preload.ts                                   contextBridge 安全桥
 src/shared/contracts/                            IPC Schema、类型、channel 与 bridge 协议
 src/shared/domain/                               跨进程可复用的纯领域逻辑
-src/main/application/                            授权、计划、监控任务等应用用例编排
+src/main/application/                            授权、计划、监控任务、自动更新等应用用例编排
 src/main/application/capabilities/               应用层所需的最小能力函数类型
-src/main/infrastructure/                         OpenAPI、OAuth、JSON 持久化、通知等适配器
+src/main/infrastructure/                         OpenAPI、OAuth、JSON 持久化、更新、通知等适配器
 src/main/ipc/                                    IPC 注册与安全错误转换
 src/main/windows/                                BrowserWindow 创建与外链策略
 src/main/monitor-task-store.ts                    监控任务规则和串行化读改写
