@@ -1,4 +1,4 @@
-name: Dev Build and Release
+name: DEV Build and Release
 
 on:
   push:
@@ -88,7 +88,7 @@ jobs:
           retention-days: 14
 
   release:
-    name: Publish GitHub prerelease
+    name: Publish GitHub release
     needs: package
     runs-on: ubuntu-latest
     permissions:
@@ -109,16 +109,17 @@ jobs:
           set -euo pipefail
 
           tag="dev-${GITHUB_RUN_NUMBER}"
-          title="Dev build #${GITHUB_RUN_NUMBER} (${GITHUB_SHA::7})"
+          title="DEV build #${GITHUB_RUN_NUMBER} (${GITHUB_SHA::7})"
 
           cat > release-notes.md <<EOF
-          由 \`dev\` 分支提交自动构建的预发布版本。
+          由 \`dev\` 分支提交自动构建的 DEV 正式发布版本。
 
           - Commit: \`${GITHUB_SHA}\`
           - Workflow: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}
           EOF
 
-          # 重新运行同一次工作流时复用原 Release，并覆盖同名安装包，保证任务可重试。
+          # DEV 分支在当前项目中就是正式发布渠道，因此这里创建普通 Release，
+          # 不标记为 Pre-release；重新运行同一次工作流时复用原 Release。
           if gh release view "${tag}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
             gh release upload "${tag}" release-assets/* \
               --repo "${GITHUB_REPOSITORY}" \
@@ -126,13 +127,11 @@ jobs:
             gh release edit "${tag}" \
               --repo "${GITHUB_REPOSITORY}" \
               --title "${title}" \
-              --notes-file release-notes.md \
-              --prerelease
+              --notes-file release-notes.md
           else
             gh release create "${tag}" release-assets/* \
               --repo "${GITHUB_REPOSITORY}" \
               --target "${GITHUB_SHA}" \
               --title "${title}" \
-              --notes-file release-notes.md \
-              --prerelease
+              --notes-file release-notes.md
           fi
