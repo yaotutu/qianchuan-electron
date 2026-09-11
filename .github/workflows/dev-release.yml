@@ -114,7 +114,8 @@ jobs:
         run: |
           set -euo pipefail
 
-          tag="dev-${GITHUB_RUN_NUMBER}"
+          # GitHub Release 标签必须是合法 SemVer，electron-updater 才能识别 DEV 通道。
+          tag="1.0.0-dev.${GITHUB_RUN_NUMBER}"
           title="DEV build #${GITHUB_RUN_NUMBER} (${GITHUB_SHA::7})"
 
           cat > release-notes.md <<EOF
