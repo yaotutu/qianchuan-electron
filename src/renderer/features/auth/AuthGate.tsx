@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Spin } from '@arco-design/web-react'
 import { useQuery } from '@tanstack/react-query'
-import type { ProductCredentials, ProductRegisterInput } from '../../../shared/contracts'
+import type { ProductCredentials, ProductRegisterInput, Result } from '../../../shared/contracts'
 import { qianchuanApi } from '../../shared/api/qianchuan-api'
 import { LoginPage } from './LoginPage'
 import { WorkspaceLayout } from '../../layouts/WorkspaceLayout/WorkspaceLayout'
@@ -25,7 +25,11 @@ export const AuthGate = () => {
     queryFn: qianchuanApi.getLoginStatus,
     enabled: loginStartedAt !== null,
     refetchInterval: (query) =>
-      ['success', 'failed', 'expired'].includes(query.state.data?.status ?? '') ? false : 2_000,
+      ['success', 'failed', 'expired'].includes(
+        query.state.data?.ok === true ? (query.state.data.data.status ?? '') : '',
+      )
+        ? false
+        : 2_000,
     retry: false,
   })
 
@@ -36,14 +40,24 @@ export const AuthGate = () => {
       return
     }
 
-    const status = statusQuery.data?.status
+    if (statusQuery.data?.ok === false) {
+      setLoginStartedAt(null)
+      setActionError(statusQuery.data.error.message)
+      return
+    }
+
+    const status = statusQuery.data?.ok === true ? statusQuery.data.data.status : undefined
     if (status === 'success') {
       setLoginStartedAt(null)
       setActionError('')
       void authStateQuery.refetch()
     } else if (status && ['failed', 'expired'].includes(status)) {
       setLoginStartedAt(null)
-      setActionError(statusQuery.data?.message || '本次巨量授权没有完成。')
+      setActionError(
+        statusQuery.data?.ok === true
+          ? statusQuery.data.data.message || '本次巨量授权没有完成。'
+          : '本次巨量授权没有完成。',
+      )
     }
   }, [authStateQuery.refetch, statusQuery.data, statusQuery.error])
 
@@ -56,11 +70,15 @@ export const AuthGate = () => {
     return () => window.clearTimeout(timeout)
   }, [loginStartedAt])
 
-  const runAction = async (action: () => Promise<unknown>, refreshState = true) => {
+  const runAction = async (action: () => Promise<Result<unknown>>, refreshState = true) => {
     setActionBusy(true)
     setActionError('')
     try {
-      await action()
+      const result = await action()
+      if (!result.ok) {
+        setActionError(result.error.message)
+        return
+      }
       if (refreshState) await authStateQuery.refetch()
     } catch (error) {
       setActionError(error instanceof Error ? error.message : '操作失败，请稍后重试。')
@@ -76,8 +94,9 @@ export const AuthGate = () => {
   const handleLogout = () => runAction(qianchuanApi.logout)
   const handleStartOAuth = async () => {
     await runAction(async () => {
-      await qianchuanApi.startLogin()
-      setLoginStartedAt(Date.now())
+      const result = await qianchuanApi.startLogin()
+      if (result.ok) setLoginStartedAt(Date.now())
+      return result
     }, false)
   }
 
@@ -91,7 +110,7 @@ export const AuthGate = () => {
   }
 
   const serviceUnavailable = healthQuery.isError || healthQuery.data?.ok !== true
-  const authState = authStateQuery.data
+  const authState = authStateQuery.data?.ok === true ? authStateQuery.data.data : undefined
   const canEnterWorkspace = Boolean(
     authState?.productUser && authState.selectedAuthorizationId && authState.selectedAdvertiserIds.length > 0,
   )
@@ -115,12 +134,21 @@ export const AuthGate = () => {
           ? healthQuery.error instanceof Error
             ? healthQuery.error.message
             : '无法连接登录服务，请稍后重试。'
-          : healthQuery.data?.message
+          : healthQuery.data?.ok === false
+            ? healthQuery.data.error.message
+            : healthQuery.data.data.message
       }
       authState={authState}
       busy={actionBusy || (loginStartedAt !== null && statusQuery.isFetching)}
       waiting={loginStartedAt !== null}
-      errorMessage={actionError || (authStateQuery.isError ? '恢复登录会话失败，请重新登录。' : undefined)}
+      errorMessage={
+        actionError ||
+        (authStateQuery.isError
+          ? '恢复登录会话失败，请重新登录。'
+          : authStateQuery.data?.ok === false
+            ? authStateQuery.data.error.message
+            : undefined)
+      }
       serviceUnavailable={serviceUnavailable}
       onLogin={handleLogin}
       onRegister={handleRegister}

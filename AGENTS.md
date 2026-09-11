@@ -1,6 +1,6 @@
 # qianchuan-electron 项目协作约定
 
-> 最后更新：2026-09-09
+> 最后更新：2026-09-11
 >
 > 本文件记录当前仓库的强约束。更完整的函数式架构说明见 `docs/functional-architecture-rules.md`，架构问题与迁移顺序见 `docs/architecture-review.md`。
 
@@ -73,10 +73,23 @@ Renderer → Preload / IPC Contract → Application Use Cases → Capability Fun
 - 巨量 App Secret、巨量 Refresh Token、Cookie 和网页登录凭据只能保存在配套 OAuth 服务端。产品 Access Token 和巨量 Access Token 只允许在 Electron 主进程内存中短期持有，不得写入磁盘、日志、仓库、测试夹具或传递给 Renderer。
 - 产品 Refresh Token 只允许由主进程通过 Electron `safeStorage` 加密保存，用于应用重启后的产品会话恢复；不得传递给 Renderer 或以明文形式落盘。
 - 巨量平台明确返回 Token 失效时，主进程只能使用当前产品会话调用 `/oauth/accounts/{authorizationId}/token` 重新获取指定授权的短期 Access Token，并对原业务请求做一次有边界重试，禁止无限重试。
-- 应用关闭后不保证监控继续运行。只有用户明确要求云端运行、多人共享或 24 小时运行时，才重新评估服务端调度方案。
+- 应用关闭后监控定时任务停止是预期行为；监控永远只在 Electron 客户端运行，不设计云端业务调度。
 - 自动更新只在打包应用中由主进程通过 electron-updater 检查 GitHub 的 DEV 正式 Release；更新状态通过最小 IPC 脱敏传给 Renderer，下载完成后由用户重启安装。更新失败不得阻塞启动。
 
-### 3.2 Preload 与 IPC
+### 3.2 职责边界不可变规则
+
+以下规则是本产品的架构硬约束，后续需求、重构和文档不得遗忘或弱化：
+
+> **总规则：OAuth 服务端只做授权基础设施，Electron 客户端承载全部业务；监控仅在客户端运行，软件关闭即停止；所有请求-响应型 IPC 统一返回 `Result<T>`。**
+
+
+1. **OAuth 服务端只负责授权基础设施**：产品会话、巨量 OAuth 授权、Token 安全保存/刷新和授权账号管理属于服务端；客户端不自行实现 OAuth 授权，服务端也不承载业务。
+2. **所有业务永远在 Electron 客户端**：计划查询、计划写入、监控任务、规则、调度、执行结果、本地持久化和通知均由客户端主进程负责；不得把业务接口代理、业务 CRUD、监控 Worker 或业务数据库放入 OAuth 服务端。
+3. **监控任务只在软件运行期间执行**：任务属于客户端本地运行时，软件关闭后定时任务停止或消失是符合预期的产品行为，不得以“持续运行”为理由设计云端调度。
+
+日常业务调用固定为：Electron 主进程向 OAuth 服务端获取指定授权的短期巨量 Access Token，然后直接调用巨量官方 OpenAPI；OAuth 服务端不代理巨量业务接口。
+
+### 3.3 Preload 与 IPC
 
 - Renderer 只能通过 `contextBridge` 暴露的 `window.qianchuan` 最小 API 与主进程通信。
 - 禁止向 Renderer 暴露完整 `ipcRenderer`、`shell`、Node.js API、文件系统或任意网络代理能力。
@@ -90,7 +103,7 @@ Renderer → Preload / IPC Contract → Application Use Cases → Capability Fun
   6. 相关契约、IPC 和页面测试。
 - IPC 输入即使已有 TypeScript 类型，也必须在主进程边界再次通过 Zod 校验；返回值必须可序列化、字段明确且不包含敏感凭据、内部堆栈或平台原始错误对象。
 
-### 3.3 React Renderer
+### 3.4 React Renderer
 
 - Renderer 只负责页面展示、表单交互、路由、查询状态和短生命周期 UI 状态，不直接读写本地文件，不直接调用巨量或 OAuth HTTP 接口。
 - 平台数据和本地任务等异步状态优先使用 TanStack Query；Zustand 只保存当前广告主、筛选条件、选中项和显示偏好等纯 UI 状态。
@@ -99,7 +112,7 @@ Renderer → Preload / IPC Contract → Application Use Cases → Capability Fun
 - 页面和组件不得接触授权 URL、`auth_code`、Access Token、Refresh Token、Cookie、平台 endpoint 或可自由拼装的平台 payload。
 - 复杂页面应拆为页面容器、展示组件、业务 Hook 和纯模型函数；业务规则不得埋在 JSX、事件回调或请求回调中。
 
-### 3.4 OAuth 服务端
+### 3.5 OAuth 服务端
 
 - 配套服务端只负责产品用户会话、巨量 OAuth、巨量 Token 安全存储与刷新，以及按当前产品用户列出和管理其巨量授权；不代理巨量业务接口。
 - 产品登录流程固定为：Renderer 通过最小 IPC 提交邮箱和密码 → Electron 主进程调用 `/auth/login` 或 `/auth/register` → 产品 Access Token 仅存主进程内存 → 产品 Refresh Token 通过 `safeStorage` 加密保存。

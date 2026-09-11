@@ -19,7 +19,11 @@ import type {
   PromotionPlanMonitorSelectionInput,
 } from '../../shared/contracts/promotion-plan'
 import { failureResult, resultFromUnknownError, successResult, type Result } from '../../shared/contracts/result'
-import type { PromotionPlanWriteInput, PromotionPlanWriteResult } from '../../shared/contracts/promotion-plan-write'
+import type {
+  PromotionPlanWriteData,
+  PromotionPlanWriteInput,
+  PromotionPlanWriteResult,
+} from '../../shared/contracts/promotion-plan-write'
 import { buildPromotionPlanWritePreflight } from '../../shared/domain/promotion-plan-write-preflight'
 import type {
   MonitorPlanSnapshot,
@@ -230,25 +234,19 @@ export const createPromotionPlanService = ({
     input: PromotionPlanWriteInput,
   ): PromotionPlanWriteResult | undefined => {
     if (!latestSnapshot) {
-      return { ok: false, status: 'detail_missing', message: '平台未返回最新计划详情，已取消修改。', steps: [] }
+      return failureResult('PLATFORM_BUSINESS_ERROR', '平台未返回最新计划详情，已取消修改。')
     }
     if (
       latestSnapshot.identity.advertiserId !== input.draft.advertiserId ||
       latestSnapshot.identity.adId !== input.draft.adId
     ) {
-      return { ok: false, status: 'ownership_mismatch', message: '最新计划归属与草稿不一致，已取消修改。', steps: [] }
+      return failureResult('CONFLICT', '最新计划归属与草稿不一致，已取消修改。')
     }
     if (latestSnapshot.contentHash !== input.draft.baseContentHash) {
-      return {
-        ok: false,
-        status: 'snapshot_conflict',
-        message: '计划配置已被平台或其他用户更新，请刷新详情后重新确认。',
-        steps: [],
-        snapshot: latestSnapshot,
-      }
+      return failureResult('CONFLICT', '计划配置已被平台或其他用户更新，请刷新详情后重新确认。')
     }
     if (latestSnapshot.identity.status === 'DELETED') {
-      return { ok: false, status: 'plan_deleted', message: '该计划已删除，不能执行修改。', steps: [] }
+      return failureResult('CONFLICT', '该计划已删除，不能执行修改。')
     }
     return undefined
   }
@@ -271,16 +269,13 @@ export const createPromotionPlanService = ({
     }
     const preflight = buildPromotionPlanWritePreflight(latestSnapshot, latestDraft)
     if (!preflight.valid || preflight.commands.length === 0) {
-      return {
-        ok: false,
-        status: 'preflight_failed',
-        message: preflight.blockingReasons.join('；') || '没有可安全提交的预算或 ROI 修改。',
-        steps: [],
-        snapshot: latestSnapshot,
-      }
+      return failureResult(
+        'VALIDATION_FAILED',
+        preflight.blockingReasons.join('；') || '没有可安全提交的预算或 ROI 修改。',
+      )
     }
 
-    const steps: PromotionPlanWriteResult['steps'] = []
+    const steps: PromotionPlanWriteData['steps'] = []
     for (const command of preflight.commands) {
       try {
         const step = await requestWithAccessTokenRefresh((accessToken) =>
@@ -291,23 +286,25 @@ export const createPromotionPlanService = ({
         // 官方增量接口没有跨请求事务：前一步成功、后一步失败时不能自动回滚。
         const message = error instanceof Error ? error.message : '平台写入失败。'
         steps.push({ operation: command.operation, ok: false, message })
-        return {
-          ok: false,
-          status: steps.some((step) => step.ok) ? 'partial_updated' : 'update_failed',
-          message: '计划修改失败；之前成功的修改可能已经生效，请刷新详情核对。',
-          steps,
+        if (steps.some((step) => step.ok)) {
+          // 部分成功不是普通异常：保留已完成步骤，要求 Renderer 立即刷新并人工核对。
+          return successResult({
+            status: 'partial_updated',
+            message: '计划修改部分完成；之前成功的修改可能已经生效，请刷新详情核对。',
+            steps,
+          })
         }
+        return failureResult('PLATFORM_BUSINESS_ERROR', '计划修改失败，请刷新详情核对后重试。')
       }
     }
 
     const refreshedDetail = await getDetail({ advertiserId: input.draft.advertiserId, adId: input.draft.adId })
-    return {
-      ok: true,
+    return successResult({
       status: 'updated',
       message: '平台已接受修改，并已重新读取最新计划详情。',
       steps,
       snapshot: refreshedDetail.snapshot,
-    }
+    })
   }
 
   /** 调度器按广告主批量读取计划，找到全部目标后提前停止翻页。 */

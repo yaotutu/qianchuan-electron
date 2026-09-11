@@ -5,6 +5,7 @@ import { useSearchParams } from 'react-router-dom'
 import { useWorkspaceStore } from '../../app/store'
 import { qianchuanApi } from '../../shared/api/qianchuan-api'
 import type { MonitorTask, MonitorTaskUpdateInput } from '../../../shared/contracts'
+import type { Result } from '../../../shared/contracts/result'
 import { showErrorFeedback, showSuccessFeedback } from '../../shared/ui/feedback'
 import type { PromotionMonitorPageProps, PromotionMonitorTab } from './model'
 import { MonitorCreatePage } from './components/MonitorCreatePage'
@@ -17,7 +18,7 @@ import { useMonitorTasks } from './hooks/useMonitorTasks'
 
 /**
  * 推广监控入口已经切换为真实本地任务闭环：创建、筛选、启停、编辑、复制和删除。
- * 千川计划读取仍走服务端薄代理，任务 CRUD 则全部通过 preload 进入 Electron 主进程。
+ * 千川计划读取和任务 CRUD 都通过 preload 进入 Electron 主进程；主进程直接调用官方 OpenAPI。
  */
 export const PromotionMonitorPage = ({ currentAccountId, accounts }: PromotionMonitorPageProps) => {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -30,16 +31,16 @@ export const PromotionMonitorPage = ({ currentAccountId, accounts }: PromotionMo
     availableAccountIds: accounts.map((account) => String(account.advertiserId)),
     enabled: tab === 'manage',
   })
-  const tasks = tasksState.query.data?.tasks || []
+  const tasks = tasksState.query.data?.ok === true ? tasksState.query.data.data.tasks : []
 
   useEffect(() => setSelectedTaskIds([]), [tasksState.advertiserId, tasksState.page, setSelectedTaskIds])
 
   const refreshTasks = async () => {
     await queryClient.invalidateQueries({ queryKey: ['promotion-monitor', 'tasks'] })
   }
-  const handleMutationResult = async (result: { ok?: boolean; message?: string }, successMessage: string) => {
+  const handleMutationResult = async (result: Result<unknown>, successMessage: string) => {
     if (result.ok !== true) {
-      showErrorFeedback(result.message || '操作失败，请重试。')
+      showErrorFeedback(result.error.message || '操作失败，请重试。')
       return false
     }
     await refreshTasks()
@@ -70,13 +71,16 @@ export const PromotionMonitorPage = ({ currentAccountId, accounts }: PromotionMo
     onSuccess: async (result) => {
       await refreshTasks()
       if (result.ok !== true) {
-        showErrorFeedback(result.message || '立即检查失败，请稍后重试。')
+        showErrorFeedback(result.error.message || '立即检查失败，请稍后重试。')
         return
       }
+      const summary = result.data
       showSuccessFeedback(
-        result.skipped
+        summary.outcome === 'busy'
           ? '已有检查正在执行，请稍后查看结果。'
-          : `已检查 ${result.checkedCount} 条：触发 ${result.triggeredCount}，正常 ${result.normalCount}，缺少数据 ${result.dataMissingCount}，失败 ${result.errorCount}。`,
+          : summary.outcome === 'idle'
+            ? '当前没有到期的监控任务。'
+            : `已检查 ${summary.checkedCount} 条：触发 ${summary.triggeredCount}，正常 ${summary.normalCount}，缺少数据 ${summary.dataMissingCount}，失败 ${summary.errorCount}。`,
       )
     },
     onError: (error) => showErrorFeedback(error instanceof Error ? error.message : '立即检查失败。'),
@@ -146,7 +150,7 @@ export const PromotionMonitorPage = ({ currentAccountId, accounts }: PromotionMo
               if (await handleMutationResult(result, '已删除选中的监控任务。')) {
                 setSelectedTaskIds([])
                 resolve()
-              } else reject(new Error(result.message || '删除失败'))
+              } else reject(new Error(result.ok === false ? result.error.message : '删除失败'))
             },
             onError: reject,
           })
@@ -205,7 +209,7 @@ export const PromotionMonitorPage = ({ currentAccountId, accounts }: PromotionMo
             />
           )}
           {tasksState.query.data?.ok === false && (
-            <Alert type="error" content={tasksState.query.data.message || '读取本地监控任务失败。'} />
+            <Alert type="error" content={tasksState.query.data.error.message || '读取本地监控任务失败。'} />
           )}
           <MonitorTaskTable
             tasks={tasks}

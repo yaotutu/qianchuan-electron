@@ -132,17 +132,16 @@ export const createMonitorScheduler = (dependencies: SchedulerDependencies) => {
       runningAdvertisers.add(advertiserId)
       return true
     })
-    const skipped = availableGroups.length < groupedTasks.size
-
-    // 所有目标广告主都在运行时返回 skipped；没有到期任务则是正常的空检查，不混淆两种状态。
+    // 没有到期任务是 idle；有任务但目标广告主都被同一调度器占用才是 busy。
+    // 两种状态分开表达，避免页面把“本轮无需检查”误报成“检查正在执行”。
     if (availableGroups.length === 0) {
       return {
+        outcome: groupedTasks.size > 0 ? 'busy' : 'idle',
         checkedCount: 0,
         triggeredCount: 0,
         normalCount: 0,
         errorCount: 0,
         dataMissingCount: 0,
-        skipped,
       }
     }
 
@@ -176,12 +175,12 @@ export const createMonitorScheduler = (dependencies: SchedulerDependencies) => {
       )
       const statuses = groupResults.flat()
       return {
+        outcome: 'checked' as const,
         checkedCount: statuses.length,
         triggeredCount: statuses.filter((status) => status === 'TRIGGERED').length,
         normalCount: statuses.filter((status) => status === 'NORMAL').length,
         errorCount: statuses.filter((status) => status === 'ERROR').length,
         dataMissingCount: statuses.filter((status) => status === 'DATA_MISSING').length,
-        skipped: false,
       }
     } finally {
       availableGroups.forEach(([advertiserId]) => runningAdvertisers.delete(advertiserId))

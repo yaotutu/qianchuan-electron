@@ -1,17 +1,25 @@
 import { ZodError } from 'zod'
 import {
   authActionResultSchema,
+  authStateResultSchema,
   authorizationIdSchema,
-  authStateSchema,
-  oauthLoginStatusSchema,
+  oauthLoginStatusResultSchema,
   productCredentialsSchema,
   productRegisterInputSchema,
-  healthSchema,
+  healthResultSchema,
   promotionPlanDetailResultSchema,
   promotionPlanListResultSchema,
+  monitorTaskBatchUpdateResultSchema,
+  monitorTaskCreateInputSchema,
+  monitorTaskCreateResultSchema,
+  monitorTaskDeleteResultSchema,
+  monitorTaskFiltersSchema,
+  monitorAdvertiserIdSchema,
+  monitorTaskIdSchema,
   monitorTaskListResultSchema,
-  monitorTaskMutationResultSchema,
   monitorTaskRunResultSchema,
+  monitorTaskUpdateInputSchema,
+  monitorTaskUpdateResultSchema,
   type PromotionPlanDetailInput,
   type PromotionPlanListInput,
   type PromotionPlanMonitorSelectionInput,
@@ -23,6 +31,7 @@ import {
   type MonitorTaskUpdateInput,
   type ProductCredentials,
   type ProductRegisterInput,
+  appUpdateStateResultSchema,
   appUpdateStateSchema,
   type AppUpdateState,
 } from '../../../shared/contracts'
@@ -62,19 +71,21 @@ const runBridgeRequest = async <T>(actionName: string, request: () => Promise<T>
 
 export const qianchuanApi = {
   getAppUpdateState: () =>
-    runBridgeRequest('读取更新状态', async () => appUpdateStateSchema.parse(await getBridge().appUpdate.getState())),
+    runBridgeRequest('读取更新状态', async () =>
+      appUpdateStateResultSchema.parse(await getBridge().appUpdate.getState()),
+    ),
   checkForAppUpdate: () =>
-    runBridgeRequest('检查更新', async () => appUpdateStateSchema.parse(await getBridge().appUpdate.check())),
+    runBridgeRequest('检查更新', async () => appUpdateStateResultSchema.parse(await getBridge().appUpdate.check())),
   installAppUpdate: () =>
-    runBridgeRequest('安装更新', async () => appUpdateStateSchema.parse(await getBridge().appUpdate.install())),
+    runBridgeRequest('安装更新', async () => appUpdateStateResultSchema.parse(await getBridge().appUpdate.install())),
   onAppUpdateChanged: (listener: (state: AppUpdateState) => void) =>
     getBridge().appUpdate.onChanged((state) => listener(appUpdateStateSchema.parse(state))),
   getHealth: () =>
-    runBridgeRequest('读取登录服务状态', async () => healthSchema.parse(await getBridge().auth.getHealth())),
+    runBridgeRequest('读取登录服务状态', async () => healthResultSchema.parse(await getBridge().auth.getHealth())),
   restoreSession: () =>
-    runBridgeRequest('恢复登录会话', async () => authStateSchema.parse(await getBridge().auth.restoreSession())),
+    runBridgeRequest('恢复登录会话', async () => authStateResultSchema.parse(await getBridge().auth.restoreSession())),
   getAuthState: () =>
-    runBridgeRequest('读取登录状态', async () => authStateSchema.parse(await getBridge().auth.getState())),
+    runBridgeRequest('读取登录状态', async () => authStateResultSchema.parse(await getBridge().auth.getState())),
   login: (input: ProductCredentials) =>
     runBridgeRequest('登录', async () =>
       authActionResultSchema.parse(await getBridge().auth.login(productCredentialsSchema.parse(input))),
@@ -87,10 +98,14 @@ export const qianchuanApi = {
   startLogin: () =>
     runBridgeRequest('发起巨量授权', async () => authActionResultSchema.parse(await getBridge().auth.startLogin())),
   getLoginStatus: () =>
-    runBridgeRequest('读取授权结果', async () => oauthLoginStatusSchema.parse(await getBridge().auth.getLoginStatus())),
+    runBridgeRequest('读取授权结果', async () =>
+      oauthLoginStatusResultSchema.parse(await getBridge().auth.getLoginStatus()),
+    ),
   selectAuthorization: (authorizationId: string) =>
     runBridgeRequest('切换巨量授权', async () =>
-      authStateSchema.parse(await getBridge().auth.selectAuthorization(authorizationIdSchema.parse(authorizationId))),
+      authStateResultSchema.parse(
+        await getBridge().auth.selectAuthorization(authorizationIdSchema.parse(authorizationId)),
+      ),
     ),
   deleteAuthorization: (authorizationId: string) =>
     runBridgeRequest('解绑巨量授权', async () =>
@@ -118,31 +133,44 @@ export const qianchuanApi = {
     ),
   listMonitorTasks: (filters: MonitorTaskFilters) =>
     runBridgeRequest('读取本地监控任务', async () =>
-      monitorTaskListResultSchema.parse(await getBridge().promotionMonitor.listTasks(filters)),
+      monitorTaskListResultSchema.parse(
+        await getBridge().promotionMonitor.listTasks(monitorTaskFiltersSchema.parse(filters) as MonitorTaskFilters),
+      ),
     ),
   createMonitorTasks: (input: MonitorTaskCreateInput) =>
     runBridgeRequest('创建监控任务', async () =>
-      monitorTaskMutationResultSchema.parse(await getBridge().promotionMonitor.createTask(input)),
+      monitorTaskCreateResultSchema.parse(
+        await getBridge().promotionMonitor.createTask(monitorTaskCreateInputSchema.parse(input)),
+      ),
     ),
   updateMonitorTask: (taskId: string, input: MonitorTaskUpdateInput) =>
     runBridgeRequest('更新监控任务', async () =>
-      monitorTaskMutationResultSchema.parse(await getBridge().promotionMonitor.updateTask(taskId, input)),
+      monitorTaskUpdateResultSchema.parse(
+        await getBridge().promotionMonitor.updateTask(
+          monitorTaskIdSchema.parse(taskId),
+          monitorTaskUpdateInputSchema.parse(input),
+        ),
+      ),
     ),
   deleteMonitorTask: (taskId: string) =>
     runBridgeRequest('删除监控任务', async () =>
-      monitorTaskMutationResultSchema.parse(await getBridge().promotionMonitor.deleteTask(taskId)),
+      monitorTaskDeleteResultSchema.parse(
+        await getBridge().promotionMonitor.deleteTask(monitorTaskIdSchema.parse(taskId)),
+      ),
     ),
   batchUpdateMonitorTaskStatus: (taskIds: string[], status: 'RUNNING' | 'PAUSED') =>
     runBridgeRequest('批量更新监控任务', async () =>
-      monitorTaskMutationResultSchema.parse(await getBridge().promotionMonitor.batchUpdateStatus(taskIds, status)),
+      monitorTaskBatchUpdateResultSchema.parse(await getBridge().promotionMonitor.batchUpdateStatus(taskIds, status)),
     ),
   batchDeleteMonitorTasks: (taskIds: string[]) =>
     runBridgeRequest('批量删除监控任务', async () =>
-      monitorTaskMutationResultSchema.parse(await getBridge().promotionMonitor.batchDelete(taskIds)),
+      monitorTaskDeleteResultSchema.parse(await getBridge().promotionMonitor.batchDelete(taskIds)),
     ),
   runMonitorTasksNow: (advertiserId: string) =>
     runBridgeRequest('立即检查监控任务', async () =>
-      monitorTaskRunResultSchema.parse(await getBridge().promotionMonitor.runNow(advertiserId)),
+      monitorTaskRunResultSchema.parse(
+        await getBridge().promotionMonitor.runNow(monitorAdvertiserIdSchema.parse(advertiserId)),
+      ),
     ),
   onMonitorTasksChanged: (listener: () => void) => getBridge().promotionMonitor.onChanged(listener),
 }

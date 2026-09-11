@@ -54,22 +54,24 @@ export const PromotionPlanEditPreview = ({ snapshot }: PromotionPlanEditPreviewP
     },
     onSuccess: async (result) => {
       if (!result.ok) {
-        // 预算与 ROI 是两个独立的官方增量请求；部分成功时不能把它展示成普通失败，
-        // 需要主动刷新详情并提醒用户核对平台最终值，避免基于旧快照继续编辑。
-        if (result.status === 'partial_updated') {
-          await queryClient.invalidateQueries({
-            queryKey: promotionPlanQueryKeys.detail({
-              advertiserId: snapshot.identity.advertiserId,
-              adId: snapshot.identity.adId,
-            }),
-          })
-          setConfirmed(false)
-          showErrorFeedback(result.message || '部分修改可能已经生效，请刷新详情核对预算和支付 ROI。')
-          return
-        }
-        showErrorFeedback(result.message || '平台未接受本次修改。')
+        showErrorFeedback(result.error.message)
         return
       }
+
+      // 预算与 ROI 是两个独立的官方增量请求；部分成功时不能把它展示成普通成功，
+      // 需要主动刷新详情并提醒用户核对平台最终值，避免基于旧快照继续编辑。
+      if (result.data.status === 'partial_updated') {
+        await queryClient.invalidateQueries({
+          queryKey: promotionPlanQueryKeys.detail({
+            advertiserId: snapshot.identity.advertiserId,
+            adId: snapshot.identity.adId,
+          }),
+        })
+        setConfirmed(false)
+        showErrorFeedback(result.data.message || '部分修改可能已经生效，请刷新详情核对预算和支付 ROI。')
+        return
+      }
+
       await queryClient.invalidateQueries({
         queryKey: promotionPlanQueryKeys.detail({
           advertiserId: snapshot.identity.advertiserId,
@@ -78,7 +80,7 @@ export const PromotionPlanEditPreview = ({ snapshot }: PromotionPlanEditPreviewP
       })
       setConfirmed(false)
       setShowPreview(false)
-      showSuccessFeedback(result.message || '计划修改已完成。')
+      showSuccessFeedback(result.data.message || '计划修改已完成。')
     },
     onError: (error) => showErrorFeedback(error instanceof Error ? error.message : '提交计划修改失败。'),
   })

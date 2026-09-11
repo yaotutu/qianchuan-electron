@@ -30,7 +30,7 @@ const hasAtMostTwoDecimalPlaces = (value: number) => Math.abs(value * 100 - Math
 
 const isRecommendedBudgetMode = (budgetMode: string | undefined) => {
   const normalized = (budgetMode ?? '').trim().toUpperCase()
-  // 官方文档对建议预算的枚举和值约束仍需以服务端实时返回为准；这里仅对已知语义做保守拦截，
+  // 官方文档对建议预算的枚举和值约束仍需以平台实时返回为准；这里仅对已知语义做保守拦截，
   // 不把未知值猜测成普通预算模式。
   return /RECOMMEND|SUGGEST|建议/.test(normalized)
 }
@@ -69,7 +69,7 @@ const buildBudgetCommand = (
         update_budget_infos: [{ ad_id: adId.value, budget: change.after }],
       },
     },
-    warning: '预算命令仍需服务端重新读取计划并确认权限、归属、状态及建议预算约束。',
+    warning: '预算命令仍需由 Electron 主进程重新读取计划，并确认权限、归属、状态及建议预算约束。',
   }
 }
 
@@ -118,7 +118,7 @@ const buildRoiCommand = (
  * 只生成官方专项写接口的“提交准备命令”，不执行网络请求。
  *
  * 这里故意把预览校验、能力校验、字段白名单和平台资料完整性检查集中在一个纯函数中，
- * 未来接入真实写入时，服务端仍必须重新读取快照并重复校验，不能把 Renderer 的结果当作授权凭证。
+ * 当前真实写入由 Electron 主进程执行，因此主进程必须重新读取快照并重复校验，不能把 Renderer 的结果当作授权凭证。
  */
 export const buildPromotionPlanWritePreflight = (
   snapshot: PromotionPlanDetailSnapshot,
@@ -160,19 +160,19 @@ export const buildPromotionPlanWritePreflight = (
   }
 
   const canPrepareCommands = preview.valid && blockingReasons.length === 0
-  // 任一校验失败都清空命令，保持 fail-closed。未来调用方即使错误地忽略 valid，
+  // 任一校验失败都清空命令，保持 fail-closed。调用方即使错误地忽略 valid，
   // 也拿不到可执行载荷，避免在草稿过期或混有未支持字段时发生部分写入。
   const commands = canPrepareCommands ? candidateCommands : []
 
   if (commands.length > 0) {
     addUnique(warnings, '当前仅生成官方开放平台增量接口的本地准备结果，不会发送请求或修改真实计划。')
-    addUnique(warnings, '真实提交前必须由服务端重读最新详情并校验 baseContentHash，防止并发覆盖。')
+    addUnique(warnings, '真实提交前必须由 Electron 主进程重读最新详情并校验 baseContentHash，防止并发覆盖。')
   }
 
   const result = {
     valid: canPrepareCommands && commands.length > 0,
     hasSupportedChanges: candidateCommands.length > 0,
-    // 即使现在没有执行入口，也提前把二次确认作为协议事实固定下来，避免未来接入时遗漏。
+    // 即使调用方只把结果用于预览，也保留二次确认标记，避免真实提交时遗漏。
     requiresUserConfirmation: commands.length > 0,
     commands,
     unsupportedFields,

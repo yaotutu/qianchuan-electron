@@ -156,7 +156,7 @@ export const buildPromotionPlanChangePreview = (
   const hasChanges = fieldChanges.length > 0
   if (hasChanges) {
     warnings.push('该结果仅为本地差异预览，不代表平台最终接受。')
-    warnings.push('后续接入真实写接口前，必须重新读取详情并校验 baseContentHash，避免覆盖他人或平台的新修改。')
+    warnings.push('真实提交前，必须重新读取详情并校验 baseContentHash，避免覆盖他人或平台的新修改。')
   }
 
   return {

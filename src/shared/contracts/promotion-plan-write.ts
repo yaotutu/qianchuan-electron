@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
 import { promotionPlanDetailSnapshotSchema, promotionPlanEditDraftSchema } from './promotion-plan'
+import { resultSchema, type Result } from './result'
 
 /**
  * 当前只允许把已核实的专项增量写接口纳入提交准备层。
@@ -97,16 +98,21 @@ const promotionPlanWriteStepResultSchema = z
   })
   .strip()
 
-export const promotionPlanWriteResultSchema = z
+export const promotionPlanWriteStatusSchema = z.enum(['updated', 'partial_updated'])
+
+export const promotionPlanWriteDataSchema = z
   .object({
-    ok: z.boolean().optional().default(false),
-    status: z.string().optional(),
-    message: z.string().optional(),
-    steps: z.array(promotionPlanWriteStepResultSchema).optional().default([]),
+    status: promotionPlanWriteStatusSchema,
+    message: z.string().trim().min(1).max(500),
+    steps: z.array(promotionPlanWriteStepResultSchema),
     snapshot: promotionPlanDetailSnapshotSchema.optional(),
   })
   .strip()
 
+/** 写入 IPC 使用统一 Result；部分成功作为成功分支中的明确业务状态保留。 */
+export const promotionPlanWriteResultSchema = resultSchema(promotionPlanWriteDataSchema)
+
 export type PromotionPlanWriteInput = z.infer<typeof promotionPlanWriteInputSchema>
 export type PromotionPlanWriteStepResult = z.infer<typeof promotionPlanWriteStepResultSchema>
-export type PromotionPlanWriteResult = z.infer<typeof promotionPlanWriteResultSchema>
+export type PromotionPlanWriteData = z.infer<typeof promotionPlanWriteDataSchema>
+export type PromotionPlanWriteResult = Result<PromotionPlanWriteData>

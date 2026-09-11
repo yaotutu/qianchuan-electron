@@ -1,6 +1,6 @@
 import type { AdvertiserAccount } from '../../../shared/contracts'
 
-/** 推广监控页面当前使用的分页大小，后续接入服务端分页策略时集中修改。 */
+/** 推广监控页面当前使用的分页大小，统一由本地页面模型管理。 */
 export const PROMOTION_MONITOR_PAGE_SIZE = 20
 
 /** 平台投放状态映射，展示文案与接口枚举保持隔离。 */

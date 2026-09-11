@@ -101,18 +101,18 @@ describe('本地监控调度器', () => {
     await fetchStarted
 
     await expect(scheduler.runOnce({ force: true })).resolves.toEqual({
+      outcome: 'busy',
       checkedCount: 0,
       triggeredCount: 0,
       normalCount: 0,
       errorCount: 0,
       dataMissingCount: 0,
-      skipped: true,
     })
 
     releaseFetch?.([{ id: 'plan-1', metrics: { payRoi: 1.1 } }])
     await expect(firstRun).resolves.toMatchObject({
+      outcome: 'checked',
       checkedCount: 1,
-      skipped: false,
     })
   })
 
@@ -156,8 +156,8 @@ describe('本地监控调度器', () => {
     releaseFetches.get('186002')?.([{ id: 'plan-2', metrics: { payRoi: 1.1 } }])
 
     await expect(run).resolves.toMatchObject({
+      outcome: 'checked',
       checkedCount: 2,
-      skipped: false,
     })
   })
 
@@ -180,12 +180,12 @@ describe('本地监控调度器', () => {
     })
 
     await expect(scheduler.runOnce()).resolves.toEqual({
+      outcome: 'checked',
       checkedCount: 1,
       triggeredCount: 0,
       normalCount: 0,
       errorCount: 1,
       dataMissingCount: 0,
-      skipped: false,
     })
     expect(tasks[0].lastResult).toMatchObject({ status: 'ERROR', message: '本次检查失败：服务端暂时不可用' })
   })

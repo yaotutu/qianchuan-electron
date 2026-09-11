@@ -58,8 +58,11 @@ describe('IPC 输入边界', () => {
 
     await expect(getHandler(IPC_CHANNELS.monitorTask.create)({}, { plans: 'not-an-array' })).resolves.toEqual({
       ok: false,
-      status: 'invalid_request',
-      message: '请求参数格式无效，请刷新页面后重试。',
+      error: {
+        code: 'VALIDATION_FAILED',
+        message: '请求参数格式无效，请刷新页面后重试。',
+        retryable: false,
+      },
     })
     expect(create).not.toHaveBeenCalled()
   })

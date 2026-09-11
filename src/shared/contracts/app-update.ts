@@ -1,5 +1,7 @@
 import { z } from 'zod'
 
+import { resultSchema, type Result } from './result'
+
 /**
  * 更新状态只保留 Renderer 真正需要展示和交互的字段，避免把 electron-updater 的
  * UpdateInfo、下载路径或 GitHub 响应直接穿过 IPC 边界。
@@ -22,5 +24,8 @@ export const appUpdateStateSchema = z.object({
   message: z.string().optional(),
 })
 
+export const appUpdateStateResultSchema = resultSchema(appUpdateStateSchema)
+
 export type AppUpdateStatus = z.infer<typeof appUpdateStatusSchema>
 export type AppUpdateState = z.infer<typeof appUpdateStateSchema>
+export type AppUpdateResult = Result<AppUpdateState>

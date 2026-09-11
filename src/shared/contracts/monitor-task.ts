@@ -1,9 +1,12 @@
 import { z } from 'zod'
 
+import { resultSchema, type Result } from './result'
+
 export type MonitorMetric = 'ROI' | 'COST' | 'BUDGET'
 export type MonitorOperator = 'GT' | 'GTE' | 'LT' | 'LTE'
 export type MonitorTaskStatus = 'RUNNING' | 'PAUSED'
 export type MonitorAction = 'NOTICE'
+export type MonitorCheckStatus = 'PENDING' | 'NORMAL' | 'TRIGGERED' | 'DATA_MISSING' | 'ERROR'
 
 export type MonitorRule = {
   metric: MonitorMetric
@@ -12,7 +15,7 @@ export type MonitorRule = {
 }
 
 export type MonitorTaskCheckResult = {
-  status: string
+  status: MonitorCheckStatus
   message: string
 }
 
@@ -63,20 +66,22 @@ export type MonitorTaskUpdateInput = {
   intervalMinutes?: number
 }
 
+/** Renderer 与 IPC 之间只使用业务语义字段；平台 snake_case 只留在 Infrastructure 边界。 */
 export type MonitorTaskFilters = {
-  advertiser_id: string
+  advertiserId: string
   keyword: string
   status: 'ALL' | MonitorTaskStatus
   metric: 'ALL' | MonitorMetric
   action: 'ALL' | MonitorAction
   page: number
-  page_size: number
+  pageSize: number
 }
 
 /** 主进程仓库允许省略筛选项，并在内部应用默认值。 */
 export type MonitorTaskStoreFilters = Partial<MonitorTaskFilters>
 
-export type MonitorTaskListResult = {
+export type MonitorTaskListData = {
+  advertiserId?: string
   tasks: MonitorTask[]
   page: {
     current: number
@@ -85,6 +90,26 @@ export type MonitorTaskListResult = {
     totalPages: number
   }
 }
+
+export type MonitorTaskCreateData = { tasks: MonitorTask[] }
+export type MonitorTaskUpdateData = { task: MonitorTask }
+export type MonitorTaskDeleteData = { deletedIds: string[] }
+export type MonitorTaskBatchUpdateData = { tasks: MonitorTask[] }
+export type MonitorTaskRunData = {
+  outcome: 'checked' | 'busy' | 'idle'
+  checkedCount: number
+  triggeredCount: number
+  normalCount: number
+  errorCount: number
+  dataMissingCount: number
+}
+
+export type MonitorTaskListResult = Result<MonitorTaskListData>
+export type MonitorTaskCreateResult = Result<MonitorTaskCreateData>
+export type MonitorTaskUpdateResult = Result<MonitorTaskUpdateData>
+export type MonitorTaskDeleteResult = Result<MonitorTaskDeleteData>
+export type MonitorTaskBatchUpdateResult = Result<MonitorTaskBatchUpdateData>
+export type MonitorTaskRunResult = Result<MonitorTaskRunData>
 
 export const monitorRuleSchema = z.object({
   metric: z.enum(['ROI', 'COST', 'BUDGET']),
@@ -130,13 +155,13 @@ export const monitorTaskUpdateInputSchema = z
 
 export const monitorTaskFiltersSchema = z
   .object({
-    advertiser_id: ipcText(128).optional(),
+    advertiserId: ipcText(128).optional(),
     keyword: ipcText(500).optional(),
     status: z.enum(['ALL', 'RUNNING', 'PAUSED']).optional(),
     metric: z.enum(['ALL', 'ROI', 'COST', 'BUDGET']).optional(),
     action: z.enum(['ALL', 'NOTICE']).optional(),
     page: z.number().int().min(1).max(10_000).optional(),
-    page_size: z.number().int().min(1).max(100).optional(),
+    pageSize: z.number().int().min(1).max(100).optional(),
   })
   .strip()
 
@@ -163,56 +188,42 @@ export const monitorTaskSchema = z.object({
   lastCheckedAt: z.string().nullable().optional().default(null),
   lastResult: z
     .object({
-      // 结果状态由主进程统一计算；未知状态仍保留为字符串，避免边界数据导致 Renderer 崩溃。
-      status: z.string(),
+      status: z.enum(['PENDING', 'NORMAL', 'TRIGGERED', 'DATA_MISSING', 'ERROR']),
       message: z.string(),
     })
     .optional()
     .default({ status: 'PENDING', message: '等待首次检查' }),
 })
 
-export const monitorTaskListResultSchema = z
-  .object({
-    ok: z.boolean().optional().default(false),
-    status: z.string().optional(),
-    message: z.string().optional(),
-    advertiserId: z
-      .union([z.string(), z.number()])
-      .optional()
-      .transform((value) => (value === undefined ? undefined : String(value))),
-    tasks: z.array(monitorTaskSchema).optional().default([]),
-    page: z
-      .object({
-        current: z.union([z.number(), z.string()]).optional(),
-        pageSize: z.union([z.number(), z.string()]).optional(),
-        total: z.union([z.number(), z.string()]).optional(),
-        totalPages: z.union([z.number(), z.string()]).optional(),
-      })
-      .optional(),
-  })
-  .passthrough()
+const monitorTaskPageSchema = z.object({
+  current: z.number().int().min(1),
+  pageSize: z.number().int().min(1),
+  total: z.number().int().min(0),
+  totalPages: z.number().int().min(0),
+})
 
-export const monitorTaskRunResultSchema = z
-  .object({
-    ok: z.boolean().optional().default(false),
-    status: z.string().optional(),
-    message: z.string().optional(),
-    checkedCount: z.number().optional().default(0),
-    triggeredCount: z.number().optional().default(0),
-    normalCount: z.number().optional().default(0),
-    errorCount: z.number().optional().default(0),
-    dataMissingCount: z.number().optional().default(0),
-    skipped: z.boolean().optional().default(false),
-  })
-  .passthrough()
+const monitorTaskListDataSchema = z.object({
+  advertiserId: z.string().optional(),
+  tasks: z.array(monitorTaskSchema),
+  page: monitorTaskPageSchema,
+})
 
-export const monitorTaskMutationResultSchema = z
-  .object({
-    ok: z.boolean().optional().default(false),
-    status: z.string().optional(),
-    message: z.string().optional(),
-    task: monitorTaskSchema.optional(),
-    tasks: z.array(monitorTaskSchema).optional(),
-    deletedIds: z.array(z.string()).optional(),
-  })
-  .passthrough()
+const monitorTaskCreateDataSchema = z.object({ tasks: z.array(monitorTaskSchema) })
+const monitorTaskUpdateDataSchema = z.object({ task: monitorTaskSchema })
+const monitorTaskDeleteDataSchema = z.object({ deletedIds: z.array(z.string()) })
+const monitorTaskBatchUpdateDataSchema = z.object({ tasks: z.array(monitorTaskSchema) })
+const monitorTaskRunDataSchema = z.object({
+  outcome: z.enum(['checked', 'busy', 'idle']),
+  checkedCount: z.number().int().min(0),
+  triggeredCount: z.number().int().min(0),
+  normalCount: z.number().int().min(0),
+  errorCount: z.number().int().min(0),
+  dataMissingCount: z.number().int().min(0),
+})
+
+export const monitorTaskListResultSchema = resultSchema(monitorTaskListDataSchema)
+export const monitorTaskCreateResultSchema = resultSchema(monitorTaskCreateDataSchema)
+export const monitorTaskUpdateResultSchema = resultSchema(monitorTaskUpdateDataSchema)
+export const monitorTaskDeleteResultSchema = resultSchema(monitorTaskDeleteDataSchema)
+export const monitorTaskBatchUpdateResultSchema = resultSchema(monitorTaskBatchUpdateDataSchema)
+export const monitorTaskRunResultSchema = resultSchema(monitorTaskRunDataSchema)

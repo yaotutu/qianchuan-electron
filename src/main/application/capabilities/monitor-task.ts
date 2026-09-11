@@ -1,7 +1,7 @@
 import type {
   MonitorTask,
   MonitorTaskCreateInput,
-  MonitorTaskListResult,
+  MonitorTaskListData,
   MonitorTaskStoreFilters,
   MonitorTaskStatus,
   MonitorTaskUpdateInput,
@@ -14,7 +14,7 @@ import type {
  * 这样应用用例可以接收真实 Store、测试替身或未来的其他实现，而不需要修改自身代码。
  */
 export type MonitorTaskStoreCapabilities = {
-  list: (filters: MonitorTaskStoreFilters) => Promise<MonitorTaskListResult>
+  list: (filters: MonitorTaskStoreFilters) => Promise<MonitorTaskListData>
   create: (input: MonitorTaskCreateInput) => Promise<MonitorTask[]>
   update: (taskId: string, input: MonitorTaskUpdateInput) => Promise<MonitorTask>
   removeMany: (taskIds: string[]) => Promise<string[]>
@@ -26,22 +26,19 @@ export type MonitorTaskSchedulerCapabilities = {
   runOnce: (options?: MonitorTaskRunOptions) => Promise<MonitorTaskRunSummary>
 }
 
-/**
- * 调度器返回给应用层的纯数据摘要。
- * 应用层不需要知道定时器句柄或并发锁等调度器内部状态。
- */
+/** 调度器返回给应用层的纯数据摘要，不暴露内部锁或定时器状态。 */
 export type MonitorTaskRunOptions = {
   force?: boolean
   advertiserId?: string
 }
 
 export type MonitorTaskRunSummary = {
+  outcome: 'checked' | 'busy' | 'idle'
   checkedCount: number
   triggeredCount: number
   normalCount: number
   errorCount: number
   dataMissingCount: number
-  skipped: boolean
 }
 
 /** 监控任务应用用例的全部外部能力，由组合根显式传入。 */

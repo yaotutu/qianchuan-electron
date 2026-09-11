@@ -72,8 +72,8 @@ export const WorkspaceLayout = ({
     })
     void qianchuanApi
       .getAppUpdateState()
-      .then((nextState) => {
-        if (active) setUpdateState(nextState)
+      .then((result) => {
+        if (active && result.ok) setUpdateState(result.data)
       })
       .catch(() => {
         // 更新状态读取失败不影响工作台正常使用，主进程会继续保持后台检查。
@@ -86,7 +86,10 @@ export const WorkspaceLayout = ({
 
   const checkForUpdate = async () => {
     try {
-      setUpdateState(await qianchuanApi.checkForAppUpdate())
+      const result = await qianchuanApi.checkForAppUpdate()
+      if (result.ok) showInfoFeedback(result.data.message || '更新检查已完成。')
+      else showErrorFeedback(result.error.message)
+      if (result.ok) setUpdateState(result.data)
     } catch (error) {
       showErrorFeedback(error instanceof Error ? error.message : '检查更新失败，请稍后重试。')
     }
@@ -94,7 +97,9 @@ export const WorkspaceLayout = ({
 
   const installUpdate = async () => {
     try {
-      await qianchuanApi.installAppUpdate()
+      const result = await qianchuanApi.installAppUpdate()
+      if (result.ok) setUpdateState(result.data)
+      else showErrorFeedback(result.error.message)
     } catch (error) {
       showErrorFeedback(error instanceof Error ? error.message : '安装更新失败，请稍后重试。')
     }

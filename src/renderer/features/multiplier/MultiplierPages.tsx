@@ -60,7 +60,7 @@ export const MultiplierMonitorPage = ({
     availableAccountIds: accounts.map((account) => String(account.advertiserId)),
     enabled: true,
   })
-  const list = tasks.query.data?.tasks || []
+  const list = tasks.query.data?.ok === true ? tasks.query.data.data.tasks : []
   const summary = useMemo(
     () => ({
       running: list.filter((task) => task.status === 'RUNNING').length,
@@ -86,7 +86,7 @@ export const MultiplierMonitorPage = ({
           pending={tasks.query.isPending}
           error={tasks.query.isError}
           ok={tasks.query.data?.ok}
-          message={tasks.query.data?.message}
+          message={tasks.query.data?.ok === false ? tasks.query.data.error.message : undefined}
           empty={!list.length}
           onRetry={() => void tasks.query.refetch()}
         >

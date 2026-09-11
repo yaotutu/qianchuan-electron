@@ -72,13 +72,13 @@ export const useMonitorTasks = ({ currentAccountId, availableAccountIds, enabled
 
   const filters = useMemo<MonitorTaskFilters>(
     () => ({
-      advertiser_id: advertiserId,
+      advertiserId,
       keyword,
       status,
       metric,
       action,
       page,
-      page_size: PROMOTION_MONITOR_PAGE_SIZE,
+      pageSize: PROMOTION_MONITOR_PAGE_SIZE,
     }),
     [action, advertiserId, keyword, metric, page, status],
   )
@@ -89,23 +89,24 @@ export const useMonitorTasks = ({ currentAccountId, availableAccountIds, enabled
     enabled: Boolean(advertiserId) && enabled,
     placeholderData: keepPreviousData,
   })
-  const total = Number(query.data?.page?.total || 0)
-  const totalPages = Number(query.data?.page?.totalPages || Math.ceil(total / PROMOTION_MONITOR_PAGE_SIZE))
+  const total = query.data?.ok === true ? query.data.data.page.total : 0
+  const totalPages =
+    query.data?.ok === true ? query.data.data.page.totalPages : Math.ceil(total / PROMOTION_MONITOR_PAGE_SIZE)
   const runningCountQuery = useQuery({
     queryKey: ['promotion-monitor', 'tasks', 'running-count', advertiserId],
     queryFn: () =>
       qianchuanApi.listMonitorTasks({
-        advertiser_id: advertiserId,
+        advertiserId,
         keyword: '',
         status: 'RUNNING',
         metric: 'ALL',
         action: 'ALL',
         page: 1,
-        page_size: 1,
+        pageSize: 1,
       }),
     enabled: Boolean(advertiserId),
   })
-  const runningCount = Number(runningCountQuery.data?.page?.total || 0)
+  const runningCount = runningCountQuery.data?.ok === true ? runningCountQuery.data.data.page.total : 0
 
   useEffect(() => {
     const unsubscribe = qianchuanApi.onMonitorTasksChanged(() => {

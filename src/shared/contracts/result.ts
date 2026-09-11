@@ -8,6 +8,9 @@ import { z } from 'zod'
  */
 export const applicationErrorCodeSchema = z.enum([
   'UNAUTHORIZED',
+  'AUTHENTICATION_FAILED',
+  'AUTHORIZATION_FAILED',
+  'AUTH_SERVICE_UNAVAILABLE',
   'FORBIDDEN_ADVERTISER',
   'PLATFORM_RATE_LIMITED',
   'PLATFORM_UNAVAILABLE',
@@ -54,8 +57,14 @@ export const resultFromUnknownError = (error: unknown): Result<never> => {
   const errorRecord = error && typeof error === 'object' ? (error as Record<string, unknown>) : {}
   const platformCode = String(errorRecord.platformCode ?? '')
 
-  if (error instanceof z.ZodError) {
-    return failureResult('VALIDATION_FAILED', '请求参数格式无效，请刷新页面后重试。')
+  if (error instanceof z.ZodError || errorRecord.name === 'MonitorTaskValidationError') {
+    return failureResult(
+      'VALIDATION_FAILED',
+      errorRecord.name === 'MonitorTaskValidationError' && message ? message : '请求参数格式无效，请刷新页面后重试。',
+    )
+  }
+  if (/本地监控任务|本地存储|monitor.?task.*storage/u.test(message)) {
+    return failureResult('LOCAL_STORAGE_FAILED', '本地监控任务数据暂时不可用，请重启应用后重试。', true)
   }
   if (/当前未登录|请先完成.*授权|unauthorized|未授权/u.test(message)) {
     return failureResult('UNAUTHORIZED', '当前未登录，请先完成巨量千川授权。')
@@ -72,7 +81,14 @@ export const resultFromUnknownError = (error: unknown): Result<never> => {
   if (platformCode === '429' || /限流|rate.?limit|too many requests/u.test(normalizedMessage)) {
     return failureResult('PLATFORM_RATE_LIMITED', '平台请求过于频繁，请稍后重试。', true)
   }
-  if (/网络请求失败|返回内容不是合法 json|服务不可用|network|timeout|超时/u.test(normalizedMessage)) {
+  if (
+    /登录服务请求失败|登录服务.*不可用|oauth.*服务|网络请求失败|返回内容不是合法 json|服务不可用|network|timeout|超时/u.test(
+      normalizedMessage,
+    )
+  ) {
+    if (/登录服务|oauth/u.test(normalizedMessage)) {
+      return failureResult('AUTH_SERVICE_UNAVAILABLE', '登录服务暂时不可用，请稍后重试。', true)
+    }
     return failureResult('PLATFORM_UNAVAILABLE', '千川平台暂时不可用，请稍后重试。', true)
   }
   if (/被平台拒绝|平台.*异常|平台.*失败|http 状态异常|业务错误/u.test(message)) {

@@ -6,6 +6,7 @@ import {
   promotionPlanMonitorSelectionInputSchema,
   promotionPlanListResultSchema,
   promotionPlanResultSchema,
+  promotionPlanWriteResultSchema,
 } from '../index'
 
 describe('Electron 共享契约', () => {
@@ -44,9 +45,16 @@ describe('Electron 共享契约', () => {
     ).toEqual({ advertiserId: '186001', scene: 'UNI_PROJECT' })
   })
 
-  it('为缺少字段的监控列表提供安全默认值', () => {
-    const result = monitorTaskListResultSchema.parse({ ok: true })
-    expect(result.tasks).toEqual([])
+  it('监控列表返回固定 Result<T> 数据结构', () => {
+    const result = monitorTaskListResultSchema.parse({
+      ok: true,
+      data: {
+        advertiserId: '186001',
+        tasks: [],
+        page: { current: 1, pageSize: 20, total: 0, totalPages: 0 },
+      },
+    })
+    expect(result.data.tasks).toEqual([])
   })
 })
 
@@ -228,5 +236,31 @@ describe('计划列表 Result 契约', () => {
     })
 
     expect(() => promotionPlanListResultSchema.parse({ ok: false, status: 'error', message: 'legacy' })).toThrow()
+  })
+})
+
+describe('计划写入 Result 契约', () => {
+  it('成功和部分成功都通过 data.status 表达，拒绝旧式顶层状态字段', () => {
+    expect(
+      promotionPlanWriteResultSchema.parse({
+        ok: true,
+        data: {
+          status: 'partial_updated',
+          message: '预算已更新，ROI 更新失败，请刷新核对。',
+          steps: [{ operation: 'UPDATE_BUDGET', ok: true, requestId: 'request-1' }],
+          unsafe: 'drop',
+        },
+        status: 'legacy-status',
+      }),
+    ).toEqual({
+      ok: true,
+      data: {
+        status: 'partial_updated',
+        message: '预算已更新，ROI 更新失败，请刷新核对。',
+        steps: [{ operation: 'UPDATE_BUDGET', ok: true, requestId: 'request-1' }],
+      },
+    })
+
+    expect(() => promotionPlanWriteResultSchema.parse({ ok: false, status: 'update_failed' })).toThrow()
   })
 })

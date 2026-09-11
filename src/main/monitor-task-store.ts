@@ -9,7 +9,7 @@ import type {
   MonitorTaskCheckResult,
   MonitorTaskCreateInput,
   MonitorTaskStoreFilters,
-  MonitorTaskListResult,
+  MonitorTaskListData,
   MonitorTaskStatus,
   MonitorTaskUpdateInput,
 } from '../shared/contracts/monitor-task'
@@ -123,9 +123,9 @@ const toPositiveInteger = (value: unknown, fallback: number, maximum = Number.MA
 export const filterMonitorTasks = (
   tasks: MonitorTask[],
   filters: MonitorTaskStoreFilters = {},
-): MonitorTaskListResult => {
+): MonitorTaskListData => {
   const keyword = asTrimmedText(filters.keyword).toLocaleLowerCase('zh-CN')
-  const advertiserId = asTrimmedText(filters.advertiser_id)
+  const advertiserId = asTrimmedText(filters.advertiserId)
   const status = filters.status ?? 'ALL'
   const metric = filters.metric ?? 'ALL'
   const action = filters.action ?? 'ALL'
@@ -144,7 +144,7 @@ export const filterMonitorTasks = (
     })
     .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
 
-  const pageSize = toPositiveInteger(filters.page_size, DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE)
+  const pageSize = toPositiveInteger(filters.pageSize, DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE)
   const totalPages = Math.ceil(filtered.length / pageSize)
   const requestedPage = toPositiveInteger(filters.page, 1)
   const current = Math.min(requestedPage, Math.max(totalPages, 1))

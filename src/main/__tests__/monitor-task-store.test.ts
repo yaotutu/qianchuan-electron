@@ -90,13 +90,13 @@ describe('监控任务领域逻辑', () => {
       updatedAt: '2026-09-05T04:00:00.000Z',
     }
     const result = filterMonitorTasks([first, second], {
-      advertiser_id: '186002',
+      advertiserId: '186002',
       keyword: '直播',
       status: 'PAUSED',
       metric: 'COST',
       action: 'NOTICE',
       page: 1,
-      page_size: 1,
+      pageSize: 1,
     })
     expect(result.tasks.map((task) => task.id)).toEqual(['task-2'])
     expect(result.page).toEqual({ current: 1, pageSize: 1, total: 1, totalPages: 1 })
@@ -126,13 +126,13 @@ describe('监控任务本地仓库', () => {
     const restored = await createMonitorTaskStore(createJsonMonitorTaskPersistence(filePath)).list({
       status: 'PAUSED',
       page: 1,
-      page_size: 20,
+      pageSize: 20,
     })
     expect(restored.page.total).toBe(2)
     expect(restored.tasks.every((task) => task.status === 'PAUSED')).toBe(true)
 
     const deleted = await store.removeMany([created[0].id])
     expect(deleted).toEqual([created[0].id])
-    expect((await store.list({ page: 1, page_size: 20 })).page.total).toBe(1)
+    expect((await store.list({ page: 1, pageSize: 20 })).page.total).toBe(1)
   })
 })

@@ -32,22 +32,21 @@ describe('监控任务应用服务', () => {
       setManyStatus: vi.fn(async () => [{ ...task, status: 'PAUSED' as const }]),
     }
     const runOnce = vi.fn(async () => ({
+      outcome: 'checked' as const,
       checkedCount: 1,
       triggeredCount: 0,
       normalCount: 1,
       errorCount: 0,
       dataMissingCount: 0,
-      skipped: false,
     }))
     const service = createMonitorTaskService({ store, scheduler: { runOnce } })
 
-    await expect(service.list({ page: 1 })).resolves.toMatchObject({ ok: true, status: 'ready' })
+    await expect(service.list({ page: 1 })).resolves.toMatchObject({ ok: true, data: { tasks: [task] } })
     await expect(service.delete('task-1')).resolves.toEqual({
       ok: true,
-      status: 'deleted',
-      deletedIds: ['task-1'],
+      data: { deletedIds: ['task-1'] },
     })
-    await expect(service.runNow(' 186001 ')).resolves.toMatchObject({ ok: true, status: 'checked' })
+    await expect(service.runNow(' 186001 ')).resolves.toMatchObject({ ok: true, data: { outcome: 'checked' } })
     expect(runOnce).toHaveBeenCalledWith({ force: true, advertiserId: '186001' })
   })
 
@@ -63,25 +62,26 @@ describe('监控任务应用服务', () => {
       store,
       scheduler: {
         runOnce: async () => ({
+          outcome: 'busy' as const,
           checkedCount: 0,
           triggeredCount: 0,
           normalCount: 0,
           errorCount: 0,
           dataMissingCount: 0,
-          skipped: true,
         }),
       },
     })
 
     await expect(service.runNow('186001')).resolves.toEqual({
       ok: true,
-      status: 'busy',
-      checkedCount: 0,
-      triggeredCount: 0,
-      normalCount: 0,
-      errorCount: 0,
-      dataMissingCount: 0,
-      skipped: true,
+      data: {
+        outcome: 'busy',
+        checkedCount: 0,
+        triggeredCount: 0,
+        normalCount: 0,
+        errorCount: 0,
+        dataMissingCount: 0,
+      },
     })
   })
 })

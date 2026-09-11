@@ -273,7 +273,7 @@ describe('商品投放计划应用服务', () => {
 
     const result = await service.update(createWriteInput(snapshot, { budgetYuan: 300, roiGoal: 3.2 }))
 
-    expect(result).toMatchObject({ ok: true, status: 'updated' })
+    expect(result).toMatchObject({ ok: true, data: { status: 'updated' } })
     expect(getDetail).toHaveBeenCalledTimes(2)
     expect(executeWrite).toHaveBeenCalledTimes(2)
     expect(executeWrite.mock.calls.map(([input]) => input.command.operation)).toEqual(['UPDATE_BUDGET', 'UPDATE_ROI'])
@@ -291,11 +291,11 @@ describe('商品投放计划应用服务', () => {
 
     const conflictInput = createWriteInput(snapshot, { budgetYuan: 300 })
     conflictInput.draft.baseContentHash = 'a'.repeat(64)
-    await expect(service.update(conflictInput)).resolves.toMatchObject({ ok: false, status: 'snapshot_conflict' })
+    await expect(service.update(conflictInput)).resolves.toMatchObject({ ok: false, error: { code: 'CONFLICT' } })
 
     await expect(service.update(createWriteInput(snapshot, { name: '不支持的名称' }))).resolves.toMatchObject({
       ok: false,
-      status: 'preflight_failed',
+      error: { code: 'VALIDATION_FAILED' },
     })
 
     const deletedSnapshot = createSnapshot({
@@ -312,7 +312,7 @@ describe('商品投放计划应用服务', () => {
     })
     await expect(deletedService.update(createWriteInput(deletedSnapshot, { budgetYuan: 300 }))).resolves.toMatchObject({
       ok: false,
-      status: 'plan_deleted',
+      error: { code: 'CONFLICT' },
     })
     expect(executeWrite).not.toHaveBeenCalled()
   })
@@ -334,7 +334,7 @@ describe('商品投放计划应用服务', () => {
       suggestedService.update(createWriteInput(suggestedSnapshot, { budgetYuan: 300 })),
     ).resolves.toMatchObject({
       ok: false,
-      status: 'preflight_failed',
+      error: { code: 'VALIDATION_FAILED' },
     })
     expect(suggestedExecuteWrite).not.toHaveBeenCalled()
 
@@ -352,7 +352,7 @@ describe('商品投放计划应用服务', () => {
     })
     await expect(unsafeService.update(createWriteInput(unsafeSnapshot, { roiGoal: 3 }))).resolves.toMatchObject({
       ok: false,
-      status: 'preflight_failed',
+      error: { code: 'VALIDATION_FAILED' },
     })
     expect(unsafeExecuteWrite).not.toHaveBeenCalled()
   })
@@ -372,8 +372,8 @@ describe('商品投放计划应用服务', () => {
     })
 
     const result = await service.update(createWriteInput(snapshot, { budgetYuan: 300, roiGoal: 3.2 }))
-    expect(result).toMatchObject({ ok: false, status: 'partial_updated' })
-    expect(result.steps).toEqual([
+    expect(result).toMatchObject({ ok: true, data: { status: 'partial_updated' } })
+    expect(result.ok && result.data.steps).toEqual([
       expect.objectContaining({ operation: 'UPDATE_BUDGET', ok: true }),
       expect.objectContaining({ operation: 'UPDATE_ROI', ok: false }),
     ])

@@ -83,11 +83,11 @@ export const MonitorCreatePage = ({ advertiserId, accounts, onAdvertiserChange, 
       }),
     onSuccess: (result) => {
       if (result.ok !== true) {
-        showErrorFeedback(result.message || '创建监控任务失败。')
+        showErrorFeedback(result.error.message || '创建监控任务失败。')
         return
       }
       void queryClient.invalidateQueries({ queryKey: ['promotion-monitor', 'tasks'] })
-      showSuccessFeedback(`已创建 ${result.tasks?.length || selectedPlans.length} 条监控任务。`)
+      showSuccessFeedback(`已创建 ${result.data.tasks.length || selectedPlans.length} 条监控任务。`)
       setSelectedPlanIds([])
       onBack()
     },

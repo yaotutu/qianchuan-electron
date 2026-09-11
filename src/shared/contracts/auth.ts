@@ -1,5 +1,7 @@
 import { z } from 'zod'
 
+import { resultSchema, type Result } from './result'
+
 /** Renderer 可见的产品用户信息，不包含产品 Token。 */
 export const productUserSchema = z.object({
   id: z.string(),
@@ -42,8 +44,7 @@ export const authStateSchema = z.object({
   accessTokenExpiresAt: z.string().optional(),
 })
 
-export const healthSchema = z.object({
-  ok: z.boolean(),
+export const healthDataSchema = z.object({
   status: z.string().optional(),
   message: z.string().optional(),
   version: z.string().optional(),
@@ -63,15 +64,13 @@ export const productRegisterInputSchema = productCredentialsSchema.extend({
   verificationCode: z.string().length(4),
 })
 
-export const authActionResultSchema = z.object({
-  ok: z.boolean(),
+export const authActionDataSchema = z.object({
   status: z.string().optional(),
   message: z.string().optional(),
   retryAfterSeconds: z.number().optional(),
 })
 
-export const oauthLoginStatusSchema = z.object({
-  ok: z.boolean(),
+export const oauthLoginStatusDataSchema = z.object({
   status: z.string().optional(),
   attemptId: z.string().optional(),
   message: z.string().optional(),
@@ -82,9 +81,19 @@ export type ProductUser = z.infer<typeof productUserSchema>
 export type AdvertiserAccount = z.infer<typeof advertiserAccountSchema>
 export type OAuthUser = z.infer<typeof oauthUserSchema>
 export type OAuthAuthorizationSummary = z.infer<typeof oauthAuthorizationSummarySchema>
+/** 所有跨 IPC 的认证查询和命令统一使用 Result<T>；OAuth 服务端内部 DTO 不属于这里。 */
+export const healthResultSchema = resultSchema(healthDataSchema)
+export const authStateResultSchema = resultSchema(authStateSchema)
+export const authActionResultSchema = resultSchema(authActionDataSchema)
+export const oauthLoginStatusResultSchema = resultSchema(oauthLoginStatusDataSchema)
+
 export type AuthState = z.infer<typeof authStateSchema>
-export type HealthResult = z.infer<typeof healthSchema>
+export type AuthStateResult = Result<AuthState>
+export type HealthData = z.infer<typeof healthDataSchema>
+export type HealthResult = Result<HealthData>
 export type ProductCredentials = z.infer<typeof productCredentialsSchema>
 export type ProductRegisterInput = z.infer<typeof productRegisterInputSchema>
-export type AuthActionResult = z.infer<typeof authActionResultSchema>
-export type OAuthLoginStatusResult = z.infer<typeof oauthLoginStatusSchema>
+export type AuthActionData = z.infer<typeof authActionDataSchema>
+export type AuthActionResult = Result<AuthActionData>
+export type OAuthLoginStatusData = z.infer<typeof oauthLoginStatusDataSchema>
+export type OAuthLoginStatusResult = Result<OAuthLoginStatusData>
