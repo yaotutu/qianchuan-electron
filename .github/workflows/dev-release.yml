@@ -74,7 +74,7 @@ jobs:
 
       - name: Set monotonic DEV version
         shell: bash
-        run: npm version --no-git-tag-version "1.0.0-dev.${GITHUB_RUN_NUMBER}"
+        run: npm pkg set version="1.0.0-dev.${GITHUB_RUN_NUMBER}"
 
       - name: Build installers
         run: ${{ matrix.command }}
