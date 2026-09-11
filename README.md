@@ -145,4 +145,4 @@ src/
 - Windows：x64 NSIS 安装程序；
 - Linux：x64 AppImage。
 
-全部平台打包成功后，流水线会创建名为 `dev-<运行序号>` 的 GitHub 预发布版本并上传安装包。也可以在 GitHub Actions 页面通过 `workflow_dispatch` 手动运行。当前构建未配置代码签名证书，因此 macOS 和 Windows 首次打开时可能显示系统安全提示。
+全部平台打包成功后，流水线会创建版本号为 `1.0.0-dev.<运行序号>`、标签同名的 GitHub 正式 Release，并上传安装包、`latest*.yml` 和 blockmap 元数据，供 `electron-updater` 自动检测和下载。也可以在 GitHub Actions 页面通过 `workflow_dispatch` 手动运行。当前构建未配置代码签名证书，因此 macOS 和 Windows 首次打开时可能显示系统安全提示；macOS 自动安装还需要后续补齐签名与 notarization。

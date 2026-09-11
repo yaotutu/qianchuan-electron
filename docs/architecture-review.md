@@ -94,7 +94,7 @@ HTTP Routes
 - `src/main/application/update-service.ts` 只负责更新状态转换、自动下载和安装前置判断；
 - `src/main/infrastructure/electron-updater.ts` 封装 Electron updater 事件和 GitHub 实现；
 - `src/shared/contracts/app-update.ts` 只暴露稳定的状态枚举和进度字段；
-- DEV 分支发布为普通 GitHub Release，版本号按工作流编号递增，并上传 `latest*.yml` 与 blockmap 元数据；
+- DEV 分支发布为普通 GitHub Release，使用合法 SemVer 标签 `1.0.0-dev.<工作流编号>`，并上传 `latest*.yml` 与 blockmap 元数据；
 - Renderer 不接触 GitHub API、更新实例、下载路径或任何凭据，更新故障只显示为可重试状态。
 
 当前 CI 未配置 macOS/Windows 代码签名，因此 macOS 安装包的自动安装仍受签名配置限制；这不改变更新协议本身，后续配置签名密钥时无需调整 Renderer/IPC 边界。
